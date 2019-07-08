@@ -24,11 +24,12 @@
 
 #define PIN unsigned int
 
+/*
 #ifndef ENABLE_LOGGER
 #define LED2_PIN 1
 #define B2_PIN 0
 #endif
-
+*/
 
 #define LED1_PIN 2
 #define TUNE_PIN 3
@@ -55,10 +56,12 @@
 short  MAX = 127;
 short  MIN = -127;
 
+
 constexpr short speed = 0;
 constexpr short steering = 1;
 constexpr short not_asighned = 2;
 
+enum class LedAction { ON , OFF , BLYNK };
 
 #define HEADER_FONT u8g2_font_9x15B_tr
 #define SMALL_FONT u8g2_font_micro_tn
@@ -124,8 +127,10 @@ RF24 radio( CE, SCN );
 
 #define DISPLAY_128_64
 #define DISPLAY_I2C_ADDRESS 0x78
-#define D_HIGHT 64
-#define D_WIDTH 128
+#define D_ZERO_X 1
+#define D_ZERO_Y 4
+#define D_HIGHT 63
+#define D_WIDTH 127
 #define D_HALF_WIDTH D_WIDTH / 2
 #define D_HALF_HIGHT D_HIGHT / 2
 
@@ -158,14 +163,14 @@ void refreshScreen()
 
 unsigned char CHANNEL = 0x64;
 
-volatile Switch_t switch_[] = {
+Switch_t switch_[] = {
 Switch_t( S1_PIN, refreshScreen, refreshScreen),
 Switch_t( S2_PIN, refreshScreen, refreshScreen),
 Switch_t( S3_PIN, refreshScreen, refreshScreen),
 Switch_t( S4_PIN, refreshScreen, refreshScreen)
 };
 
-volatile Button_t button1(B1_PIN, []() { DISPLAY(display.drawBox(0, 0, D_WIDTH, D_HIGHT)) }, []() { switchMode(static_cast<Mode>(static_cast<int>(mode) >> 1)); }, []() {  switchMode(static_cast<Mode>(static_cast<int>(mode) << 1)); });
+Button_t button1(B1_PIN, []() { DISPLAY(display.drawBox(0, 0, D_WIDTH, D_HIGHT)) }, []() { switchMode(static_cast<Mode>(static_cast<int>(mode) >> 1)); }, []() {  switchMode(static_cast<Mode>(static_cast<int>(mode) << 1)); });
 
 unsigned char address[][6] = { "1Node" }; 
 
@@ -202,19 +207,19 @@ short drawVline( const short &x , const short &hight = D_HIGHT )
     return x;
 }
 
-void statusLedBlink(unsigned char i_mode = 2 )
+void activateStatusLed(LedAction i_action = LedAction::BLYNK )
 {
     static unsigned char LED_STS = HIGH;
-    switch (i_mode)
+    switch (i_action)
     {
-    case 0:
-        analogWrite( TUNE_PIN, ( LED_STS = LOW ) );
+	case LedAction::OFF:
+        digitalWrite( LED1_PIN, ( LED_STS = LOW ) );
         break;
-    case 1:
-        analogWrite( TUNE_PIN, ( LED_STS = HIGH ) );
+	case LedAction::ON:
+		digitalWrite( LED1_PIN, ( LED_STS = HIGH ) );
         break;
-    case 2:
-        analogWrite( TUNE_PIN, ( LED_STS = ( LED_STS == HIGH ) ? LOW : HIGH ) );
+	case LedAction::BLYNK:
+		digitalWrite( LED1_PIN, ( LED_STS = ( LED_STS == HIGH ) ? LOW : HIGH ) );
         break;
     }  
 }
@@ -271,7 +276,7 @@ unsigned char scan()
             // Did we get a carrier?
             if ( radio.testCarrier() ) 
             {
-                statusLedBlink();
+                activateStatusLed();
                 ++values[channel];
             }
 
@@ -279,7 +284,7 @@ unsigned char scan()
         }
     }
 
-    statusLedBlink(0);
+    activateStatusLed(LedAction::OFF);
     return r_channel;
 }
 
@@ -296,8 +301,8 @@ void drawCoordinates( short x, short y )
 */
 void drawSwitches()
 {
-    unsigned char x = 2;
-    unsigned char y = 2;  // Border 2 pixels
+    unsigned char x = D_ZERO_X;
+    unsigned char y = D_ZERO_Y;  // Border 2 pixels
     unsigned char h = 14; // Hight
     unsigned char w = 20; // Width
     unsigned char s = 5;  // Space
@@ -342,7 +347,7 @@ void drawBatteryLevel()
     display.setFont( MEDIUM_FONT );
     //3 digits 100 %
     short val = map( analogRead(P1_PIN) , 0 , 1023 , 0 , 100 );
-    display.drawStr(D_WIDTH - 2 - display.getMaxCharWidth() - display.getMaxCharWidth() - display.getMaxCharWidth() - 3, display.getAscent() + 3, String(val).c_str());
+    display.drawStr(D_WIDTH - 2 - display.getMaxCharWidth() - display.getMaxCharWidth() - display.getMaxCharWidth() - 3, display.getMaxCharHeight(), String(val).c_str());
   //  display.drawStr(D_WIDTH - 2 - display.getMaxCharWidth(), display.getAscent() + 3, "%");
 }
 void drawTelemetry()
@@ -366,7 +371,7 @@ void showMainScreen()
 {
     DISPLAY
     (
-        display.drawFrame(0, 0, D_WIDTH, D_HIGHT);
+      //  display.drawFrame(1, 1, D_WIDTH, D_HIGHT);
         drawSwitches();
         drawBatteryLevel();
         drawChannelNumber();
@@ -491,7 +496,7 @@ void showSys()
                 }
                 else if (j_val < J1.zero - 30)
                 {     
-                    unsigned char y_t = trimJ_MINUS( J1.zero, j_val, J1.sens[1], h/2 );
+                    unsigned char y_t = trimJ_MINUS( J1.zero, j_val, J1.sens[Joystick::DOWN], h/2 );
                     display.drawBox( b, y0, w, y_t );
 
                     J1.limits[Joystick::LMIN] = min( J1.limits[Joystick::LMIN], j_val );   
@@ -608,7 +613,7 @@ short drawTitle ( const char* i_title )
    display.setFont(HEADER_FONT);
    display.setFontMode(0);
    display.setDrawColor(1);
-   display.drawStr((D_WIDTH - display.getStrWidth(i_title)) / 2 , display.getMaxCharHeight(), i_title);
+   display.drawStr((D_WIDTH - display.getStrWidth(i_title)) / 2 , display.getMaxCharHeight() + D_ZERO_X, i_title);
    display.drawHLine(0, display.getAscent() + 3 , D_WIDTH);
 
    return display.getAscent() + 3;
@@ -652,7 +657,7 @@ void showMenuScreen()
     Button_t button( B1_PIN );
     do
     { 
-        short j = map( analogRead( SELECTOR_PIN ), 20 , 920 , 0, 20 ) % menu_items_count;
+        short j = map( analogRead( SELECTOR_PIN ), 20 , 920 , 0, 10 ) % menu_items_count;
         
         if ( button.run() || selectedMenu != j )
         {  
@@ -738,7 +743,7 @@ void setup()
     radio.enableAckPayload();    //разрешить отсылку данных в ответ на входящий сигнал
     radio.setPayloadSize(sizeof(Payload)/*32*/);     //размер пакета, в байтах
 
-    radio.openWritingPipe(address[0]);   //мы - труба 0, открываем канал для передачи данных
+    radio.openWritingPipe((const uint8_t*)address[0]);   //мы - труба 0, открываем канал для передачи данных
     radio.setChannel(CHANNEL);  //выбираем канал (в котором нет шумов!)
 
     radio.setPALevel(RF24_PA_MAX); //уровень мощности передатчика. На выбор RF24_PA_MIN, RF24_PA_LOW, RF24_PA_HIGH, RF24_PA_MAX
@@ -749,12 +754,12 @@ void setup()
     radio.powerUp();
     delayMicroseconds(200);
     radio.stopListening();
-
+/*
 #ifndef ENABLE_LOGGER
     pinMode(LED2_PIN, OUTPUT);
     pinMode(B2_PIN, INPUT);
 #endif
-
+*/
     pinMode(J1_V_PIN, INPUT);
     pinMode(J1_H_PIN, INPUT);
 
@@ -772,7 +777,9 @@ void setup()
     pinMode(LED1_PIN, OUTPUT);
     pinMode(TUNE_PIN, OUTPUT);
 
-    digitalWrite(LED1_PIN, HIGH);
+   // digitalWrite(LED1_PIN, HIGH);
+
+	activateStatusLed(LedAction::ON);
 
     J1.zero = analogRead(J1.m_pin);
     J2.zero = analogRead(J2.m_pin);
@@ -809,14 +816,17 @@ void loop()
 
     Payload data;
 
-    data.m_bits.m_b1 = digitalRead(S1_PIN);
-    data.m_bits.m_b2 = digitalRead(S2_PIN);
-    data.m_bits.m_b3 = digitalRead(S3_PIN);
-    data.m_bits.m_b4 = digitalRead(S4_PIN);
+    data.m_b1 = digitalRead(S1_PIN);
+    data.m_b2 = digitalRead(S2_PIN);
+    data.m_b3 = digitalRead(S3_PIN);
+    data.m_b4 = digitalRead(S4_PIN);
     
     data.m_speed = J1.read();
     data.m_steering = J3.read();
     
+	data.m_j[2] = J2.read();
+	data.m_j[3] = J4.read();
+
     /*
     data.m_speed = ( analogRead( SPEED_PIN ) >= zeroSpeed ) ?
         map( analogRead(SPEED_PIN), zeroSpeed, 1023 - sensSpeedUP , 0, MAX ) :
@@ -832,7 +842,7 @@ void loop()
     }
 
     
-    statusLedBlink();
+    activateStatusLed();
     refreshScreen();
 
     transmit_data = data;
