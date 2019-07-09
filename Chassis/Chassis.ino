@@ -246,7 +246,7 @@ void setup()
     radio.enableAckPayload();    //разрешить отсылку данных в ответ на входящий сигнал
     radio.setPayloadSize(sizeof(Payload)/*32*/);     //размер пакета, в байтах
    
-    radio.openReadingPipe(1, address[0]);      //хотим слушать трубу 0
+    radio.openReadingPipe(1, (const uint8_t*)address[0]);      //хотим слушать трубу 0
     radio.setChannel(0x64);  //выбираем канал (в котором нет шумов!)
 
     radio.setPALevel(RF24_PA_MAX); //уровень мощности передатчика. На выбор RF24_PA_MIN, RF24_PA_LOW, RF24_PA_HIGH, RF24_PA_MAX
@@ -327,7 +327,7 @@ void loop()
         }
         if ( ++obstacleIteration > 10 )
         {
-            LOG_MSG("Not abale to avoid obstacle");
+            LOG_MSG("Not able to avoid obstacle");
             servo.write(SERVO_ZERO);
             delay(100);
             motor.backward( 100 );
@@ -384,7 +384,7 @@ void loop()
     
       //  servo.write( curSteering );
        
-        if ( recieved_data.m_bits.m_b1 )
+        if ( recieved_data.m_b1 )
         {
             LOG_MSG("Update zero servo " << servo.read());
             EEPROM.update( 0, curSteering );
