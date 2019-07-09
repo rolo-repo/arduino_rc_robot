@@ -363,8 +363,8 @@ void drawTelemetry()
 
     display.drawBox( x0 , y0 , 47 - 2 /* line sizes */, 42 );//free space
 
-    display.drawStr(x0 + 2, y0 + display.getMaxCharHeight(), String(ack.batteryLevel).c_str());
-    display.drawStr(x0 + 2, y0 + 2* display.getMaxCharHeight(), String(ack.speed).c_str());
+    display.drawStr( x0 + ( 47 - 2 ) / 2 , y0 + 42 / 2 + display.getMaxCharHeight(), String(ack.batteryLevel).c_str());
+    display.drawStr( x0 + (47 - 2), y0 + 42 / 2 + 2* display.getMaxCharHeight(), String(ack.speed).c_str());
 }
 
 void showMainScreen()
@@ -738,7 +738,7 @@ void setup()
 
     radio.begin();              //активировать модуль
     delayMicroseconds(200);
-  //  radio.setAutoAck(false);        //режим подтверждения приёма, 1 вкл 0 выкл
+    radio.setAutoAck(0);        //режим подтверждения приёма, 1 вкл 0 выкл
     radio.setRetries( 3, 3 );    //(время между попыткой достучаться, число попыток)
     radio.enableAckPayload();    //разрешить отсылку данных в ответ на входящий сигнал
     radio.setPayloadSize(sizeof(Payload)/*32*/);     //размер пакета, в байтах
@@ -862,7 +862,8 @@ void loop()
     {
         radio.read( &ack, sizeof(ack) );
     }
-
-    /*ack.batteryLevel = data.m_steering;
-    ack.speed        = data.m_speed;*/
+/*
+    ack.batteryLevel = data.m_steering;
+    ack.speed        = data.m_speed;
+	*/
 }
