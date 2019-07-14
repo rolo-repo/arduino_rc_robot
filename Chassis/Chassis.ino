@@ -225,7 +225,10 @@ unsigned long getDistance()
 void setup() 
 {
     using namespace arduino::utils;
-    LOG_MSG_BEGIN(115200);
+ //   LOG_MSG_BEGIN(115200);
+
+	Serial.begin(115200);
+
 
     pinMode( trigPin , OUTPUT );
     pinMode( echoPin , INPUT );
@@ -258,6 +261,9 @@ void setup()
     radio.startListening();  //начинаем слушать эфир, мы приёмный модуль
 
     SERVO_ZERO = EEPROM.read(0);
+	LOG_MSG("Init success");
+
+	Serial.println("Hi");
 }
 
 void left( unsigned char i_angle )
@@ -294,6 +300,7 @@ long map(const long x, const long in_min, const long in_max, const long out_min,
 
 void loop() 
 {
+	Serial.println("Hi1");
     using namespace arduino::utils;
     byte pipeNo;
     static short curSteering = 90;

@@ -4,7 +4,7 @@
     Author:     NTNET\ROMANL
 */
 
-
+//#define ENABLE_LOGGER
 #include <SPI.h>          // библиотека для работы с шиной SPI
 #include "nRF24L01.h"     // библиотека радиомодуля
 #include "RF24.h"         // ещё библиотека радиомодуля
@@ -12,7 +12,7 @@
 #include "RFcom.h"
 //++addr &= EEPROM.length() - 1;
 
-//#define ENABLE_LOGGER
+
 #include "SerialOutput.h"
 //#include "Constants.h"
 
