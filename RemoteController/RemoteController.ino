@@ -31,16 +31,20 @@
 #endif
 */
 
-#define LED1_PIN 2
-#define TUNE_PIN 3
+#define STS_LED_PIN A0
+#define TUNE_PIN A1
+
+#define ENC_PIN1 2
+#define ENC_PIN2 3
+
 #define S1_PIN 4
 #define S2_PIN 5
 #define S3_PIN 6
 #define S4_PIN 7
 #define B1_PIN 8
 
-#define CE 9
-#define SCN 10
+#define CE_PIN 9
+#define SCN_PIN 10
 
 //////////////////////////////////////////////////////////////////////////
 #define J1_V_PIN A7  // SPEED
@@ -105,10 +109,10 @@ Joystick J4 (J4_PIN);
 
 //////////////////////////////////////////////////////////////////////////
 
-#define P1_PIN A1  // Battery
-#define P2_PIN A0  // Selector
+//#define P1_PIN A1  // Battery
+//#define P2_PIN A0  // Selector
 
-const PIN SELECTOR_PIN = P1_PIN;
+//const PIN SELECTOR_PIN = P1_PIN;
 
 //////////////////////////////////////////////////////////////////////////
 PIN  SPEED_PIN = J1_V_PIN;
@@ -122,9 +126,6 @@ unsigned short &sensSpeedDOWN = J1.sens[1];
 unsigned short &sensSteeringL = J3.sens[1];
 unsigned short &sensSteeringR = J3.sens[0];
 //////////////////////////////////////////////////////////////////////////
-
-RF24 radio( CE, SCN );
-
 #define DISPLAY_128_64
 #define DISPLAY_I2C_ADDRESS 0x78
 #define D_ZERO_X 1
@@ -134,7 +135,9 @@ RF24 radio( CE, SCN );
 #define D_HALF_WIDTH D_WIDTH / 2
 #define D_HALF_HIGHT D_HIGHT / 2
 
+unsigned char CHANNEL = 0x64;
 
+unsigned char address[][6] = { "1Node" };
 
 //U8GLIB_SSD1306_128X64 display(U8G_I2C_OPT_NONE | U8G_I2C_OPT_DEV_0);
 //U8GLIB_SH1106_128X64 display(U8G_I2C_OPT_NONE | U8G_I2C_OPT_DEV_0);
@@ -149,19 +152,20 @@ enum Mode {
 
 Mode mode = MAIN_SCREEN;
 
-using CurrentScreen = void (*)();//pointer to a function responsible for screen representation
+RF24 radio(CE_PIN, SCN_PIN);
 
+using CurrentScreen = void (*)();//pointer to a function responsible for screen representation
 CurrentScreen showScreen;
 
 void switchMode( Mode i_mode );
+void activateStatusLed(LedAction i_action);
+void handle_interupt();
 
 volatile bool displayRefresh = true;
 void refreshScreen()
 {
     displayRefresh = true;
 }
-
-unsigned char CHANNEL = 0x64;
 
 Switch_t switch_[] = {
 Switch_t( S1_PIN, refreshScreen, refreshScreen),
@@ -170,9 +174,64 @@ Switch_t( S3_PIN, refreshScreen, refreshScreen),
 Switch_t( S4_PIN, refreshScreen, refreshScreen)
 };
 
+
 Button_t button1(B1_PIN, []() { DISPLAY(display.drawBox(0, 0, D_WIDTH, D_HIGHT)) }, []() { switchMode(static_cast<Mode>(static_cast<int>(mode) >> 1)); }, []() {  switchMode(static_cast<Mode>(static_cast<int>(mode) << 1)); });
 
-unsigned char address[][6] = { "1Node" }; 
+class InteruptEncoder
+{
+public:
+	InteruptEncoder( PIN i_p1 , PIN i_p2 ):m_p1 (i_p1), m_p2(i_p2){}
+	
+	void begin() volatile
+	{
+		attachInterrupt(digitalPinToInterrupt(m_p1), handle_interupt, CHANGE);
+		attachInterrupt(digitalPinToInterrupt(m_p2), handle_interupt, CHANGE);
+		m_val = 0;
+	}
+
+	void stop() volatile
+	{
+		detachInterrupt(digitalPinToInterrupt(m_p1));
+		detachInterrupt(digitalPinToInterrupt(m_p2));
+	}
+
+	void run() volatile
+	{
+		int msb = digitalRead(m_p1);
+		int lsb = digitalRead(m_p2);
+
+		unsigned char enc_value = (msb << 1 | lsb) | m_prevVal;
+
+		if (enc_value == 0b1101 || enc_value == 0b0100 || enc_value == 0b0010 || enc_value == 0b1011)
+			m_val++;
+		else if (m_val > 0)
+			m_val--;
+
+		m_prevVal = (msb << 1 | lsb) << 2;
+	}
+
+	unsigned short val() volatile const
+	{
+		return m_val;
+	}
+
+
+private:
+	
+	PIN m_p1;
+	PIN m_p2;
+	unsigned short m_val = 0;
+	unsigned char m_prevVal = 0;
+};
+
+volatile InteruptEncoder  encoder1( ENC_PIN1, ENC_PIN2 );
+
+void handle_interupt()
+{
+	encoder1.run();
+	activateStatusLed(LedAction::BLYNK);
+	refreshScreen();
+}
 
 long map(const long x, const long in_min, const long in_max, const long out_min,const long out_max)
 {
@@ -213,13 +272,13 @@ void activateStatusLed(LedAction i_action = LedAction::BLYNK )
     switch (i_action)
     {
 	case LedAction::OFF:
-        digitalWrite( LED1_PIN, ( LED_STS = LOW ) );
+        digitalWrite( STS_LED_PIN, ( LED_STS = LOW ) );
         break;
 	case LedAction::ON:
-		digitalWrite( LED1_PIN, ( LED_STS = HIGH ) );
+		digitalWrite( STS_LED_PIN, ( LED_STS = HIGH ) );
         break;
 	case LedAction::BLYNK:
-		digitalWrite( LED1_PIN, ( LED_STS = ( LED_STS == HIGH ) ? LOW : HIGH ) );
+		digitalWrite( STS_LED_PIN, ( LED_STS = ( LED_STS == HIGH ) ? LOW : HIGH ) );
         break;
     }  
 }
@@ -237,12 +296,15 @@ unsigned char scan()
 
    // static bool  next = true;//because of the button need to put as static
     Button_t button(B1_PIN, []() { /*next = false;*/switchMode(LAST); });
-    // Scan all channels num_reps times
+	encoder1.begin();
+    
+	// Scan all channels num_reps times
     for ( unsigned char i = 0 ; i < num_of_scans && mode != LAST; i++ )
     {
         for ( unsigned char channel = 0 ; channel < num_channels  && mode != LAST; channel++ )
         {
             button.run();
+			//encoder1.run(); -it runs bu interupt
  
             // Select this channel
             radio.setChannel( channel );
@@ -270,7 +332,7 @@ unsigned char scan()
                     }
                 }
 
-                r_channel = drawVline( map( analogRead( SELECTOR_PIN ), 0, 1023, 0, D_WIDTH ) , D_HIGHT - 1 - drawTitle( "SEL.CHNL" )  );
+                r_channel = drawVline( map( encoder1.val() , 0, 1023, 0, D_WIDTH ) , D_HIGHT - 1 - drawTitle( "SEL.CHNL" )  );
             )
 
             // Did we get a carrier?
@@ -284,6 +346,7 @@ unsigned char scan()
         }
     }
 
+	encoder1.stop();
     activateStatusLed(LedAction::OFF);
     return r_channel;
 }
@@ -343,10 +406,13 @@ void drawChannelNumber()
 }
 void drawBatteryLevel()
 {
+	using namespace arduino::utils;
+
     display.setDrawColor(1);//white color
     display.setFont( MEDIUM_FONT );
     //3 digits 100 %
-    short val = map( analogRead(P1_PIN) , 0 , 1023 , 0 , 100 );
+	short val = ack.batteryLevel;// map(analogRead(P1_PIN), 0, 1023, 0, 100);
+
     display.drawStr(D_WIDTH - 2 - display.getMaxCharWidth() - display.getMaxCharWidth() - display.getMaxCharWidth() - 3, display.getMaxCharHeight(), String(val).c_str());
   //  display.drawStr(D_WIDTH - 2 - display.getMaxCharWidth(), display.getAscent() + 3, "%");
 }
@@ -366,7 +432,6 @@ void drawTelemetry()
     display.drawStr( x0 + ( 47 - 2 ) / 2 , y0 + 42 / 2 + display.getMaxCharHeight(), String(ack.batteryLevel).c_str());
     display.drawStr( x0 + (47 - 2), y0 + 42 / 2 + 2* display.getMaxCharHeight(), String(ack.speed).c_str());
 }
-
 void showMainScreen()
 {
     DISPLAY
@@ -381,7 +446,7 @@ void showMainScreen()
 
 short trimJ_PLUS (const unsigned short &zero, const int &j_val, unsigned short &sens, short barSize )
 {
-    unsigned short s_val = constrain( analogRead( SELECTOR_PIN ), 0, 1023 );
+    unsigned short s_val = constrain( encoder1.val(), 0, 1023 );
     sens = constrain( map( s_val, 0, 1023, 1023 - zero, 0), 0, 1023 - zero );
     return constrain( map( j_val, zero, 1023 - sens, 0, barSize), 0, barSize);
 }
@@ -397,7 +462,7 @@ short trimJ_H_Right(const unsigned short &zero, const int &j_val, unsigned short
 
 short trimJ_MINUS (const unsigned short &zero, const int &j_val, unsigned short &sens, short barSize )
 {
-    unsigned short s_val = constrain( analogRead( SELECTOR_PIN ), 0, 1023 );
+    unsigned short s_val = constrain( encoder1.val(), 0, 1023 );
     sens = constrain( map( s_val, 0, 1023, 0, zero ), 0, zero );
     return constrain( map( j_val, 0 + sens, zero, barSize, 0 ), 0, barSize );
 }
@@ -431,7 +496,7 @@ void showSys()
     
     static short joystick = 0;
     Button_t button(B1_PIN, []() { joystick++;}, []() { switchMode(LAST); } , []() { switchMode(LAST); });
-
+	encoder1.begin();
     do
     {
         button.run();
@@ -606,6 +671,9 @@ void showSys()
          */   
         )
     } while ( mode != LAST );
+
+	encoder1.stop();
+
 }
 
 short drawTitle ( const char* i_title ) 
@@ -655,9 +723,10 @@ void showMenuScreen()
     short selectedMenu = menu_items_count + 1;
 
     Button_t button( B1_PIN );
-    do
+	encoder1.begin();
+	do
     { 
-        short j = map( analogRead( SELECTOR_PIN ), 20 , 920 , 0, 10 ) % menu_items_count;
+        short j = encoder1.val() % menu_items_count;
         
         if ( button.run() || selectedMenu != j )
         {  
@@ -697,6 +766,9 @@ void showMenuScreen()
             )
         }
    } while ( mode == MENU_SCREEN );
+
+    encoder1.stop();
+
 }
 
 void switchMode( Mode i_mode = LAST ) 
@@ -772,9 +844,10 @@ void setup()
     pinMode(S4_PIN, INPUT);
     pinMode(B1_PIN, INPUT);
 
-    pinMode(P1_PIN, INPUT);
-    pinMode(P2_PIN, INPUT);
-    pinMode(LED1_PIN, OUTPUT);
+    pinMode(ENC_PIN1, INPUT);
+    pinMode(ENC_PIN2, INPUT);
+
+    pinMode(STS_LED_PIN, OUTPUT);
     pinMode(TUNE_PIN, OUTPUT);
 
    // digitalWrite(LED1_PIN, HIGH);
