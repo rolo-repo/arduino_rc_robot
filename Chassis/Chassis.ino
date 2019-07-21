@@ -14,6 +14,8 @@
 #include <EEPROM.h>
 
 #include <Servo.h>
+#include "src/Motor.h"
+#include "src/BTS7960.h"
 
 #define PIN unsigned int
 
@@ -24,11 +26,11 @@ unsigned char address[][6] = { "1Node","2Node","3Node","4Node","5Node","6Node" }
 
 //AF_DCMotor motor(3);
 
-#define MAX_LEFT 160
-#define MAX_RIGHT 60
+#define MAX_LEFT 15
+#define MAX_RIGHT 75
 #define OD_MIN_DISTANCE_CM 5
 
-int SERVO_ZERO = 110;
+int SERVO_ZERO = 45;
 /*
 L298N shield 
 Function	    Ch. A  |  Ch. B
@@ -56,7 +58,6 @@ Radio
     MISO D12
 */
 
-#define _BTS7690_
 
 //Motor
 //const PIN dirPin       = 2;
@@ -73,13 +74,14 @@ Radio
 const PIN servoPin = 6;
 
 //Objects detection
-const PIN trigPin = 8;
-const PIN echoPin = 7;
+const PIN trigPin = A1;
+const PIN echoPin = A2;
 
 //Radio
-const PIN radioCE = 9;
-const PIN radioSCN = 10;
+const PIN radioCE = 7;
+const PIN radioSCN = 8;
 
+#if 0
 class Motor
 {
     typedef  unsigned char SPEED;
@@ -200,14 +202,35 @@ private:
     Direction m_dir;
     SPEED m_speed;
 };
+#endif
 
 
-Motor motor;
+BTS7960_1PWM motor( 2, 4, 3 ) ;
 Servo servo;
 
 RF24 radio( radioCE, radioSCN );
 
-//returns distance in cm
+enum class LedAction { ON, OFF, BLYNK };
+
+void activateStatusLed(LedAction i_action = LedAction::BLYNK)
+{
+	static unsigned char LED_STS = HIGH;
+	switch (i_action)
+	{
+	case LedAction::OFF:
+		digitalWrite( A0, (LED_STS = LOW));
+		break;
+	case LedAction::ON:
+		digitalWrite( A0, (LED_STS = HIGH));
+		break;
+	case LedAction::BLYNK:
+		digitalWrite( A0, (LED_STS = (LED_STS == HIGH) ? LOW : HIGH));
+		break;
+	}
+}
+
+
+//rerns distance in cm
 unsigned long getDistance()
 {
     digitalWrite(trigPin, LOW);
@@ -229,41 +252,34 @@ void setup()
 
 	Serial.begin(115200);
 
-
     pinMode( trigPin , OUTPUT );
     pinMode( echoPin , INPUT );
-   
-    pinMode( 2, OUTPUT );
-    pinMode( 3, OUTPUT );
-    pinMode( 4, OUTPUT );
-    pinMode( 5, OUTPUT );
 
     pinMode( A0, OUTPUT );
-
-    motor.init();
-    servo.attach( servoPin);
+	activateStatusLed();
+	
+	motor.begin();
+    servo.attach( servoPin );
 
     radio.begin(); //активировать модуль
     radio.setAutoAck(1);         //режим подтверждения приёма, 1 вкл 0 выкл
     radio.setRetries(0, 0);     //(время между попыткой достучаться, число попыток)
-    radio.enableAckPayload();    //разрешить отсылку данных в ответ на входящий сигнал
-    radio.setPayloadSize(sizeof(Payload)/*32*/);     //размер пакета, в байтах
+    radio.enableAckPayload();   
+    radio.setPayloadSize(sizeof(Payload)/*32*/);   
    
-    radio.openReadingPipe(1, (const uint8_t*)address[0]);      //хотим слушать трубу 0
-    radio.setChannel(0x64);  //выбираем канал (в котором нет шумов!)
+    radio.openReadingPipe(1, (const uint8_t *)address[0]);    
+    radio.setChannel(0x64);
 
-    radio.setPALevel(RF24_PA_MAX); //уровень мощности передатчика. На выбор RF24_PA_MIN, RF24_PA_LOW, RF24_PA_HIGH, RF24_PA_MAX
-    radio.setDataRate(RF24_250KBPS); //скорость обмена. На выбор RF24_2MBPS, RF24_1MBPS, RF24_250KBPS
-  //должна быть одинакова на приёмнике и передатчике!
-    //при самой низкой скорости имеем самую высокую чувствительность и дальность!!
+    radio.setPALevel(RF24_PA_MIN); //RF24_PA_MIN, RF24_PA_LOW, RF24_PA_HIGH, RF24_PA_MAX
+    radio.setDataRate(RF24_250KBPS); //RF24_2MBPS, RF24_1MBPS, RF24_250KBPS
+
 
     radio.powerUp(); //начать работу
-    radio.startListening();  //начинаем слушать эфир, мы приёмный модуль
-
-    SERVO_ZERO = EEPROM.read(0);
+	delay(50);
+	radio.startListening();  //начинаем слушать эфир, мы приёмный модуль
+	activateStatusLed();
+   // SERVO_ZERO = EEPROM.read(0);
 	LOG_MSG("Init success");
-
-	Serial.println("Hi");
 }
 
 void left( unsigned char i_angle )
@@ -298,9 +314,10 @@ long map(const long x, const long in_min, const long in_max, const long out_min,
         return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
 
+
 void loop() 
 {
-	Serial.println("Hi1");
+	
     using namespace arduino::utils;
     byte pipeNo;
     static short curSteering = 90;
@@ -309,11 +326,12 @@ void loop()
     static Payload recieved_data;
     static short LED = HIGH;
     short obstacleIteration = 0;
+	unsigned char speed = 0;
     while ( OD_ENABLED && getDistance() < OD_MIN_DISTANCE_CM )
     {
         LOG_MSG( "Obstacle detected " << getDistance() << " cm");
 
-        if ( motor.getDirection() == Motor::FORWARD )
+        if ( motor.getDirection() == Motor::Direction::FORWARD )
         {
             motor.backward( 100 );
             delay(1000);
@@ -342,21 +360,20 @@ void loop()
             return;
         }
     }
-   
+
     while ( radio.available(&pipeNo) ) 
     {   
-        digitalWrite(A0, LED = ( LED == HIGH ) ? LOW : HIGH );
-       
+		activateStatusLed();
+
         radio.read(&recieved_data, sizeof(recieved_data));
-       
-        //bool sts[3];
+        bool sts[3];
 
-       // radio.whatHappened( sts[0], sts[1], sts[2] );
+        radio.whatHappened( sts[0], sts[1], sts[2] );
 
-       // LOG_MSG( " " << sts[0] << sts[1] << sts[2]);
+        LOG_MSG( " " << sts[0] << sts[1] << sts[2]);
 
         if ( ! recieved_data.isValid() )
-            continue;
+            continue;;
 
         lastRecievedTime = millis();
 
@@ -397,12 +414,10 @@ void loop()
             EEPROM.update( 0, curSteering );
         }
 
-        ack.speed = motor.getSpeed();
+		payLoadAck.speed = 0;
 
-        ack.batteryLevel = servo.read();
-        radio.writeAckPayload( pipeNo, &ack, sizeof(ack) );
-
-       // motor.setSpeed(curSpeed);
+		payLoadAck.batteryLevel = servo.read();
+        radio.writeAckPayload( pipeNo, &payLoadAck, sizeof(payLoadAck) );
     }
     
     if ( lastRecievedTime < millis() - 3 * arduino::utils::RF_TIMEOUT_MS )
@@ -412,5 +427,6 @@ void loop()
         motor.stop();
         servo.write(SERVO_ZERO);
         curSteering = servo.read();
+		digitalWrite(A0, LED = (LED == HIGH) ? LOW : HIGH);
     }
 }
