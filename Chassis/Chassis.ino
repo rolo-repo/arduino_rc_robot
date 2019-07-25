@@ -3,7 +3,7 @@
     Created:	03/18/19 11:43:20
     Author:     NTNET\ROMANL
 */
-
+#ifndef UNIT_TEST
 #define ENABLE_LOGGER
 #include <SPI.h>
 #include "nRF24L01.h"
@@ -14,9 +14,10 @@
 #include <EEPROM.h>
 
 #include <Servo.h>
-#include "src/Motor.h"
-#include "src/BTS7960.h"
-#include "src/Led.h"
+
+#include "Motor.h"
+#include "BTS7960.h"
+#include "Led.h"
 
 #define PIN unsigned int
 
@@ -106,7 +107,7 @@ void setup()
 	
 	motor.begin();
     servo.attach( servoPin );
-	led.off();
+	led.turn_off();
 
     radio.begin(); //активировать модуль
     radio.setAutoAck(1);         //режим подтверждения приёма, 1 вкл 0 выкл
@@ -129,17 +130,6 @@ void setup()
 	LOG_MSG("Init success");
 }
 
-void left( unsigned char i_angle )
-{
-    servo.write( i_angle);
-   // delay(500);
-}
-
-void right( unsigned char i_angle )
-{
-    servo.write(i_angle);
-    //delay(500);
-}
 
 long map(const long x, const long in_min, const long in_max, const long out_min, const long out_max)
 {
@@ -184,11 +174,11 @@ void loop()
             led.rapid_blynk(1000);
             if ( servo.read() > SERVO_ZERO )
             {
-                left( MAX_LEFT );
+                servo.write( MAX_LEFT );
             }
             else
             {
-                right( MAX_RIGHT ); 
+				servo.write( MAX_RIGHT );
             }
             motor.forward( 100 );
 			led.rapid_blynk(500);
@@ -230,22 +220,22 @@ void loop()
              << ((recieved_data.m_steering > 0) ? F(" LEFT") : F(" RIGHT"))) ;
 
 
-        if ( (char) recieved_data.m_speed > 0 )
+        if ( recieved_data.m_speed > 0 )
         {
-            motor.forward( map( (char)recieved_data.m_speed, 0, 127, 0, 255 ) );
+            motor.forward( map( recieved_data.m_speed, 0, 127, 0, 255 ) );
         }
         else
         {
-            motor.backward( map( (char)recieved_data.m_speed, -127 , 0 , 255 , 0 ) );
+            motor.backward( map( recieved_data.m_speed, -127 , 0 , 255 , 0 ) );
         }
         
-        if ( (char)recieved_data.m_steering > 0 )
+        if ( recieved_data.m_steering > 0 )
         {
-            left( curSteering = map( (char)recieved_data.m_steering, 127, 0, MAX_LEFT , SERVO_ZERO  ));
+			servo.write( curSteering = map( recieved_data.m_steering, 127, 0, MAX_LEFT , SERVO_ZERO  ));
         }
         else
         {
-            right( curSteering = map( (char)recieved_data.m_steering, -127, 0, MAX_RIGHT , SERVO_ZERO ));
+			servo.write( curSteering = map( recieved_data.m_steering, -127, 0, MAX_RIGHT , SERVO_ZERO ));
         }
        
 
@@ -280,3 +270,5 @@ void loop()
 		//digitalWrite(A0, LED = (LED == HIGH) ? LOW : HIGH);
     }
 }
+
+#endif

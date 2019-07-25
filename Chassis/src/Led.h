@@ -9,6 +9,7 @@
 
 class Led
 {
+	friend class RGBLed;
 public:
 	
 	enum class Brightness { _20, _50, _100 };
@@ -20,15 +21,15 @@ public:
 		digitalWrite(m_pin, LOW);
 	}
 
-	void on(Brightness i_brtness = Brightness::_50 );
-	void off()
+	void turn_on(Brightness i_brtness = Brightness::_50 );
+	void turn_off()
 	{
 		digitalWrite(m_pin, LOW );
 		m_status = LedStS::OFF;
 	}
 	void blynk(Brightness i_brtness = Brightness::_50 )
 	{
-		(m_status == LedStS::OFF) ? on(i_brtness) : off();
+		(m_status == LedStS::OFF) ? turn_on(i_brtness) : turn_off();
 	}
 
 	void rapid_blynk( unsigned long i_time_ms );
@@ -41,7 +42,64 @@ private:
 	LedStS m_status;
 };
 
-void Led::on( Brightness i_brtness )
+class RGBLed
+{
+public:
+	enum class  LedType: char { Red = 0b001 ,Green = 0b010 , Blue = 0b100 };
+
+	RGBLed(PIN i_green, PIN i_blue, PIN i_red) : m_green(i_green), m_blue(i_blue), m_red(i_red) {
+		m_lastUsedLed = (char)LedType::Green;
+	}
+
+	void turn_on( LedType i_type )
+	{
+		turn_off();
+		getLed(i_type).turn_on(Led::Brightness::_100);
+	}
+
+	void turn_off ()
+	{
+		m_red.turn_off();
+		m_blue.turn_off();
+		m_green.turn_off();
+	}
+
+	void blynk ()
+	{
+		turn_on( (LedType) ( ( m_lastUsedLed == static_cast<char>(LedType::Blue) ) ? static_cast<char>(LedType::Red) : m_lastUsedLed << 1 ) ) ;
+	}
+
+	void rapid_blynk(unsigned long i_time_ms);
+
+	void fade(unsigned long  i_time_ms, LedType i_type);
+
+	void fade(unsigned long  i_time_ms);
+
+private:
+
+	Led& getLed( LedType i_type )
+	{
+		m_lastUsedLed = static_cast<char>(i_type);
+
+		switch (i_type)
+		{
+		case LedType::Red:
+			return m_red;
+		case LedType::Blue:
+			return m_blue;
+		case LedType::Green:
+			return m_green;
+		}
+	}
+
+	Led m_green;
+	Led m_blue;
+	Led m_red;
+	
+	char m_lastUsedLed;
+};
+
+void Led::turn_on( Brightness i_brtness )
 {
 	switch (i_brtness)
 	{
@@ -73,13 +131,12 @@ void Led::rapid_blynk( unsigned long i_time_ms )
 	}
 }
 
-
 void Led::fade ( unsigned long i_time_ms )
 {
-	off();
+	this->turn_off();
 
 	unsigned char brightness = 0;
-	char fadeAmount = max( 5, 15000 / i_time_ms );
+	char fadeAmount = max( 5, ( 255 * 30 * 2 ) / i_time_ms );
 	
 	i_time_ms = max(i_time_ms, 120); // min is 120 ms
 
@@ -95,5 +152,30 @@ void Led::fade ( unsigned long i_time_ms )
 		delay( 30 );
 	}
 
-	off();
+	this->turn_off();
+}
+
+void RGBLed::fade(unsigned long  i_time_ms, LedType i_type)
+{
+	turn_off();
+
+	this->getLed( i_type ).fade(i_time_ms);
+}
+
+void RGBLed::fade( unsigned long  i_time_ms )
+{
+	this->fade( i_time_ms / 3 , (LedType)((m_lastUsedLed == static_cast<char>(LedType::Blue)) ? static_cast<char>(LedType::Red) : m_lastUsedLed << 1));
+	this->fade( i_time_ms / 3 , (LedType)((m_lastUsedLed == static_cast<char>(LedType::Blue)) ? static_cast<char>(LedType::Red) : m_lastUsedLed << 1));
+	this->fade( i_time_ms / 3 , (LedType)((m_lastUsedLed == static_cast<char>(LedType::Blue)) ? static_cast<char>(LedType::Red) : m_lastUsedLed << 1));
+}
+
+void RGBLed::rapid_blynk(unsigned long i_time_ms)
+{
+	i_time_ms = max(i_time_ms, 120); // min is 120 ms
+
+	while ((i_time_ms -= 30) > 0)
+	{
+		blynk();
+		delay(30);
+	}
 }
