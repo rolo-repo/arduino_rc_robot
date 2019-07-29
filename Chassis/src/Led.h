@@ -7,6 +7,26 @@
 #include "WProgram.h"
 #endif
 
+
+int closestNumber(int n, int m)
+{
+	// find the quotient 
+	int q = n / m;
+
+	// 1st possible closest number 
+	int n1 = m * q;
+
+	// 2nd possible closest number 
+	int n2 = (n * m) > 0 ? (m * (q + 1)) : (m * (q - 1));
+
+	// if true, then n1 is the required closest number 
+	if (abs(n - n1) < abs(n - n2))
+		return n1;
+
+	// else n2 is the required closest number     
+	return n2;
+}
+
 class Led
 {
 	friend class RGBLed;
@@ -21,21 +41,21 @@ public:
 		digitalWrite(m_pin, LOW);
 	}
 
-	void turn_on(Brightness i_brtness = Brightness::_50 );
+	void turn_on(const Brightness &_brtness = Brightness::_50 );
 	void turn_off()
 	{
 		digitalWrite(m_pin, LOW );
 		m_status = LedStS::OFF;
 	}
-	void blynk(Brightness i_brtness = Brightness::_50 )
+	void blynk(const Brightness& i_brtness = Brightness::_50 )
 	{
 		(m_status == LedStS::OFF) ? turn_on(i_brtness) : turn_off();
 	}
 
-	void rapid_blynk( unsigned long i_time_ms );
-	void fade(unsigned long  i_time_ms);
+	void rapid_blynk( const unsigned long& i_time_ms );
+	void fade(const unsigned long&  i_time_ms);
 
-private:
+protected:
 	enum class LedStS { ON, OFF, BLYNK };
 	PIN m_pin;
 
@@ -69,13 +89,13 @@ public:
 		turn_on( (LedType) ( ( m_lastUsedLed == static_cast<char>(LedType::Blue) ) ? static_cast<char>(LedType::Red) : m_lastUsedLed << 1 ) ) ;
 	}
 
-	void rapid_blynk(unsigned long i_time_ms);
+	void rapid_blynk(const unsigned long& i_time_ms);
 
-	void fade(unsigned long  i_time_ms, LedType i_type);
+	void fade(const unsigned long&  i_time_ms, LedType i_type);
 
-	void fade(unsigned long  i_time_ms);
+	void fade(const unsigned long&  i_time_ms);
 
-private:
+protected:
 
 	Led& getLed( LedType i_type )
 	{
@@ -99,15 +119,15 @@ private:
 	char m_lastUsedLed;
 };
 
-void Led::turn_on( Brightness i_brtness )
+void Led::turn_on( const Brightness &i_brtness )
 {
 	switch (i_brtness)
 	{
 	case Brightness::_20:
-		analogWrite( m_pin, (int ) map ( 20 , 0, 100 , 0 , 127 ) );
+		analogWrite( m_pin, (int ) map ( 20 , 0, 100 , 0 , 255 ) );
 		break;
 	case Brightness::_50:
-		analogWrite(m_pin, ( int ) map( 50, 0, 100, 0, 127 ));
+		analogWrite(m_pin, ( int ) map( 50, 0, 100, 0, 255 ));
 		break;
 	case Brightness::_100:
 		digitalWrite(m_pin, HIGH );
@@ -117,65 +137,69 @@ void Led::turn_on( Brightness i_brtness )
 	m_status = LedStS::ON;
 }
 
-void Led::rapid_blynk( unsigned long i_time_ms )
+void Led::rapid_blynk( const unsigned long &i_time_ms )
 {
-	bool sts_changed = false;
-	i_time_ms = max( i_time_ms, 120 ); // min is 120 ms
+	long iter = i_time_ms;
+	auto sleep = 40;
 
-	while ( ( i_time_ms -= 30 )  > 0 || sts_changed )
+	do
 	{
-		sts_changed = ~sts_changed;
-		
 		blynk( Brightness::_100 );
-		delay( 30 );
-	}
+		delay((iter - sleep < 0) ? iter : sleep);
+	} while ((iter -= sleep) > 0);
+
+	turn_off();
 }
 
-void Led::fade ( unsigned long i_time_ms )
+void Led::fade ( const unsigned long &i_time_ms )
 {
-	this->turn_off();
-
-	unsigned char brightness = 0;
-	char fadeAmount = max( 5, ( 255 * 30 * 2 ) / i_time_ms );
 	
-	i_time_ms = max(i_time_ms, 120); // min is 120 ms
+	long iter = i_time_ms;//closestNumber(i_time_ms,30);
 
-	while( ( i_time_ms -= 30 ) > 0 )
+    short brightness = 0;
+
+	auto fadeAmount = 5;
+
+	auto sleep = closestNumber( fadeAmount * i_time_ms, 512 /*256 * 2 */ ) / 512;
+
+	this->turn_off();
+	while( (iter -= sleep ) >= 0 )
 	{
-		analogWrite( m_pin, brightness );
 		brightness = brightness + fadeAmount;
-
+		analogWrite( m_pin, constrain( brightness, 0 , 255 ) );
 		// reverse the direction of the fading at the ends of the fade:
 		if (brightness <= 0 || brightness >= 255) 
 			fadeAmount = -fadeAmount;
 		
-		delay( 30 );
+		delay( sleep );
 	}
-
 	this->turn_off();
 }
 
-void RGBLed::fade(unsigned long  i_time_ms, LedType i_type)
+void RGBLed::fade(const unsigned long  &i_time_ms, LedType i_type)
 {
 	turn_off();
 
 	this->getLed( i_type ).fade(i_time_ms);
 }
 
-void RGBLed::fade( unsigned long  i_time_ms )
+void RGBLed::fade( const unsigned long  &i_time_ms )
 {
 	this->fade( i_time_ms / 3 , (LedType)((m_lastUsedLed == static_cast<char>(LedType::Blue)) ? static_cast<char>(LedType::Red) : m_lastUsedLed << 1));
 	this->fade( i_time_ms / 3 , (LedType)((m_lastUsedLed == static_cast<char>(LedType::Blue)) ? static_cast<char>(LedType::Red) : m_lastUsedLed << 1));
 	this->fade( i_time_ms / 3 , (LedType)((m_lastUsedLed == static_cast<char>(LedType::Blue)) ? static_cast<char>(LedType::Red) : m_lastUsedLed << 1));
 }
 
-void RGBLed::rapid_blynk(unsigned long i_time_ms)
+void RGBLed::rapid_blynk(const unsigned long &i_time_ms)
 {
-	i_time_ms = max(i_time_ms, 120); // min is 120 ms
+	long iter = i_time_ms;
+	auto sleep = 40; // to make it 25Hz
 
-	while ((i_time_ms -= 30) > 0)
+	do
 	{
 		blynk();
-		delay(30);
-	}
+		delay((iter - sleep < 0) ? iter : sleep);
+	} while ((iter -= sleep) > 0);
+
+	turn_off();
 }

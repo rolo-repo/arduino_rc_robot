@@ -200,7 +200,7 @@ void loop()
 
     while ( radio.available(&pipeNo) ) 
     {   
-		led.blynk();
+		//led.blynk();
 
         radio.read(&recieved_data, sizeof(recieved_data));
        /* bool sts[3];
@@ -219,7 +219,7 @@ void loop()
              << F(" Steering: ")  << recieved_data.m_steering 
              << ((recieved_data.m_steering > 0) ? F(" LEFT") : F(" RIGHT"))) ;
 
-
+		led.blynk(Led::Brightness::_100);
         if ( recieved_data.m_speed > 0 )
         {
             motor.forward( map( recieved_data.m_speed, 0, 127, 0, 255 ) );
@@ -266,7 +266,7 @@ void loop()
         servo.write(SERVO_ZERO);
         curSteering = servo.read();
 
-		led.fade(1000);
+		led.fade(500);
 		//digitalWrite(A0, LED = (LED == HIGH) ? LOW : HIGH);
     }
 }
