@@ -222,11 +222,11 @@ void loop()
 		led.blynk(Led::Brightness::_100);
         if ( recieved_data.m_speed > 0 )
         {
-            motor.forward( map( recieved_data.m_speed, 0, 127, 0, 255 ) );
+            motor.backward( map( recieved_data.m_speed, 0, 127, 0, 255 ) );
         }
         else
         {
-            motor.backward( map( recieved_data.m_speed, -127 , 0 , 255 , 0 ) );
+            motor.forward( map( recieved_data.m_speed, -127 , 0 , 255 , 0 ) );
         }
         
         if ( recieved_data.m_steering > 0 )
