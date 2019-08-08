@@ -3,7 +3,7 @@
     Created:	03/18/19 17:14:28
     Author:     NTNET\ROMANL
 */
-
+#ifndef UNIT_TEST
 //#define ENABLE_LOGGER
 #include <SPI.h>          // библиотека для работы с шиной SPI
 #include "nRF24L01.h"     // библиотека радиомодуля
@@ -288,11 +288,9 @@ unsigned char scan()
     const unsigned char num_channels = 128;
     const unsigned char num_of_scans = 20;
 
-    unsigned char values[num_channels];
+	unsigned char values[num_channels] = { 0 };
 
-    unsigned char r_channel = 0;
-    // Clear measurement values
-    memset( values, 0, sizeof(values) );
+    unsigned char the_channel = 0;
 
    // static bool  next = true;//because of the button need to put as static
     Button_t button(B1_PIN, []() { /*next = false;*/switchMode(LAST); });
@@ -304,7 +302,7 @@ unsigned char scan()
         for ( unsigned char channel = 0 ; channel < num_channels  && mode != LAST; channel++ )
         {
             button.run();
-			//encoder1.run(); -it runs bu interupt
+			//encoder1.run(); -it runs by interupt
  
             // Select this channel
             radio.setChannel( channel );
@@ -332,7 +330,7 @@ unsigned char scan()
                     }
                 }
 
-                r_channel = drawVline( map( encoder1.val() , 0, 1023, 0, D_WIDTH ) , D_HIGHT - 1 - drawTitle( "SEL.CHNL" )  );
+			    the_channel = drawVline( map( encoder1.val() , 0, 1023, 0, D_WIDTH ) , D_HIGHT - 1 - drawTitle( "SEL.CHNL" )  );
             )
 
             // Did we get a carrier?
@@ -348,7 +346,7 @@ unsigned char scan()
 
 	encoder1.stop();
     activateStatusLed(LedAction::OFF);
-    return r_channel;
+    return the_channel;
 }
 
 /*
@@ -411,7 +409,7 @@ void drawBatteryLevel()
     display.setDrawColor(1);//white color
     display.setFont( MEDIUM_FONT );
     //3 digits 100 %
-	short val = ack.batteryLevel;// map(analogRead(P1_PIN), 0, 1023, 0, 100);
+	short val = payLoadAck.batteryLevel;// map(analogRead(P1_PIN), 0, 1023, 0, 100);
 
     display.drawStr(D_WIDTH - 2 - display.getMaxCharWidth() - display.getMaxCharWidth() - display.getMaxCharWidth() - 3, display.getMaxCharHeight(), String(val).c_str());
   //  display.drawStr(D_WIDTH - 2 - display.getMaxCharWidth(), display.getAscent() + 3, "%");
@@ -429,8 +427,8 @@ void drawTelemetry()
 
     display.drawBox( x0 , y0 , 47 - 2 /* line sizes */, 42 );//free space
 
-    display.drawStr( x0 + ( 47 - 2 ) / 2 , y0 + 42 / 2 + display.getMaxCharHeight(), String(ack.batteryLevel).c_str());
-    display.drawStr( x0 + (47 - 2), y0 + 42 / 2 + 2* display.getMaxCharHeight(), String(ack.speed).c_str());
+    display.drawStr( x0 + ( 47 - 2 ) / 2 , y0 + 42 / 2 + display.getMaxCharHeight(), String(payLoadAck.batteryLevel).c_str());
+    display.drawStr( x0 + (47 - 2), y0 + 42 / 2 + 2* display.getMaxCharHeight(), String(payLoadAck.speed).c_str());
 }
 void showMainScreen()
 {
@@ -933,10 +931,11 @@ void loop()
 
     if ( radio.isAckPayloadAvailable() )
     {
-        radio.read( &ack, sizeof(ack) );
+        radio.read( &payLoadAck, sizeof(payLoadAck) );
     }
 /*
     ack.batteryLevel = data.m_steering;
     ack.speed        = data.m_speed;
 	*/
 }
+#endif
