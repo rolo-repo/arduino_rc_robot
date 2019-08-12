@@ -4,7 +4,7 @@
     Author:     NTNET\ROMANL
 */
 #ifndef UNIT_TEST
-//#define ENABLE_LOGGER
+#define ENABLE_LOGGER
 #include <SPI.h>          // библиотека для работы с шиной SPI
 #include "nRF24L01.h"     // библиотека радиомодуля
 #include "RF24.h"         // ещё библиотека радиомодуля
@@ -88,21 +88,17 @@ struct Joystick
 
     Joystick(PIN i_pin) : m_pin(i_pin) , function( not_asighned ){}
 
-    int read()
+    short read()
     {
-       int value = analogRead(m_pin);
+       short value = analogRead(m_pin);
        return ( value >= zero )
            ? map(value, zero, 1023 - sens[UP], 0, MAX) 
            : map(value, 0 + sens[DOWN], zero, MIN, 0);
     }
 
-	int save( int i_idx )
+	unsigned short save( unsigned short i_idx )
 	{
-		LOG_MSG( i_idx << F(" limits ") << limits[0] << F(" ") << limits[1] <<
-				F(" sens ") << sens[0] << F(" " )<< sens[1] <<
-				F(" zero ") << zero);
-
-		int index = i_idx;
+		unsigned short index = i_idx;
 
 		const unsigned char *t = (const unsigned char*)sens;
 		
@@ -121,9 +117,9 @@ struct Joystick
 		return index;
 	}
 
-	int load( int i_idx )
+	unsigned short load( unsigned short i_idx )
 	{
-		int index = i_idx;
+		unsigned short index = i_idx;
 
 		unsigned char *t = (unsigned char*)sens;
 
@@ -138,10 +134,6 @@ struct Joystick
 		{
 			t[i] = EEPROM.read(index++);
 		}
-
-		LOG_MSG(i_idx << F(" limits ") << limits[0] << F(" ") << limits[1] <<
-			F(" sens ") << sens[0] << F(" ") << sens[1] <<
-			F(" zero ") << zero);
 
 		return index;
 	}
@@ -231,51 +223,34 @@ public:
 	void begin() volatile
 	{
 		m_val = 0;
-
-		m_prevVal = 0;
-		attachInterrupt(digitalPinToInterrupt(m_p1), handle_interupt, LOW);
+		m_prevNextCode = 3;
+		attachInterrupt(digitalPinToInterrupt(m_p1), handle_interupt, CHANGE);
 	//	attachInterrupt(digitalPinToInterrupt(m_p2), handle_interupt, CHANGE);
 		
 	}
 
 	void stop() volatile
 	{
-		LOG_MSG("encoder stop");
 		detachInterrupt(digitalPinToInterrupt(m_p1));
-		//detachInterrupt(digitalPinToInterrupt(m_p2));
 	}
 
 	void run() volatile
 	{
-		int msb = digitalRead(m_p1);
-		int lsb = digitalRead(m_p2);
+		static char rot_enc_table[] = { 0,1,1,0,1,0,0,1,1,0,0,1,0,1,1,0 };
 
-		//if (msb == LOW)
-		//{
-			/*
-				unsigned char enc_value = (msb << 1 | lsb) | m_prevVal;
-			//	LOG_MSG(" m_prevVal " << m_prevVal << " enc_value " << enc_value);
-			if (enc_value == 0b1100 || enc_value == 0b0011 )
-					m_val++;
-				else if (m_val > 0 && ( enc_value == 0b1010 || enc_value == 0b1001))
-					m_val--;*/
+		m_prevNextCode <<= 2;
+		if (digitalRead(m_p1)) m_prevNextCode |= 0x02;
+		if (digitalRead(m_p2)) m_prevNextCode |= 0x01;
+		m_prevNextCode &= 0x0f;
 
-			if ((msb << 1 | lsb) != m_prevVal)
-			{
-				if (msb == lsb)
-				{
-					m_val++;
-				}
-				else if (m_val > 0)
-				{
-					m_val--;
-				}
-
-				LOG_MSG("msb " << msb << " lsb " << lsb << " val " << m_val);
-			}
-
-			m_prevVal = (msb << 1 | lsb);// << 2;
-		//}
+		// If valid then store as 16 bit data.
+		if (rot_enc_table[m_prevNextCode]) {
+			m_fence <<= 4;
+			m_fence |= m_prevNextCode;
+			
+			if ((m_fence & 0xff) == 0x2b && m_val > 0) m_val--;
+			if ((m_fence & 0xff) == 0x17) m_val++;
+		}
 	}
 
 	unsigned short val() volatile const
@@ -289,14 +264,14 @@ private:
 	PIN m_p1;
 	PIN m_p2;
 	unsigned short m_val = 0;
-	unsigned char m_prevVal = 0;
+	unsigned char m_prevNextCode = 0;
+	unsigned short m_fence = 0;
 };
 
 volatile InteruptEncoder  encoder1( ENC_PIN1, ENC_PIN2 );
 
 void handle_interupt()
 {
-	//LOG_MSG("Interupt");
 	encoder1.run();
 	//LOG_MSG("Encoder" << encoder1.val());
 	activateStatusLed(LedAction::BLYNK);
@@ -750,8 +725,8 @@ short drawTitle ( const char* i_title )
    display.setFont(HEADER_FONT);
    display.setFontMode(0);
    display.setDrawColor(1);
-   display.drawStr((D_WIDTH - display.getStrWidth(i_title)) / 2 , display.getMaxCharHeight() + D_ZERO_X, i_title);
-   display.drawHLine(0, display.getAscent() + 3 , D_WIDTH);
+   display.drawStr((D_WIDTH - display.getStrWidth(i_title)) / 2 , display.getMaxCharHeight() + D_ZERO_Y, i_title);
+   display.drawHLine(0, D_ZERO_Y + display.getAscent() + 3 , D_WIDTH);
 
    return display.getAscent() + 3;
 }
@@ -765,27 +740,33 @@ void showSaveScreen()
 	encoder1.begin();
 	Button_t save_button(SLCR_B_PIN, []() { exit = true; J4.save(J3.save(J2.save(J1.save(0)))); });
 
-	short x = 0, y = 0, y0 = 0, space = 0;
+	short x = 0, y = 0, y0 = 0, space = 10;
 	do
 	{
 		DISPLAY
 		(
 			y0 = drawTitle("SAVE");
-		//(switch_[i].getState()) ? display.drawBox(x, y, w, h) : display.drawFrame(x, y, w, h);
-		display.setFont(HEADER_FONT);
-		display.setFontMode(0);
-		display.setDrawColor(1);
-		space = D_WIDTH / 2 - 2 * D_ZERO_X - (display.getStrWidth(yes) + display.getStrWidth(no));
-		display.drawStr(D_WIDTH / 4, (D_HIGHT - y0) / 2 + display.getMaxCharHeight(), yes);
-		display.drawStr(D_WIDTH / 4 + space, (D_HIGHT - y0) / 2 + display.getMaxCharHeight(), no);
+			//(switch_[i].getState()) ? display.drawBox(x, y, w, h) : display.drawFrame(x, y, w, h);
+			display.setFont(HEADER_FONT);
+			display.setFontMode(0);
+			display.setDrawColor(2);
+			display.drawStr( D_WIDTH / 2 - display.getStrWidth(yes) - space, (D_HIGHT - y0) / 2 + display.getMaxCharHeight(), yes);
+			display.drawStr( D_WIDTH / 2 + space + display.getMaxCharWidth() , (D_HIGHT - y0) / 2 + display.getMaxCharHeight(), no);
 
-		x = D_WIDTH / 4;
-		y = (D_HIGHT - y0) / 2;
-		(encoder1.val() % 2) ? display.drawBox(x, y, display.getStrWidth(yes), display.getMaxCharHeight() + 3) : display.drawFrame(x, y, display.getStrWidth(yes), display.getMaxCharHeight() + 3);
+			//x = D_WIDTH / 2 - display.getStrWidth(yes) - space - 2;
+			y = ( D_HIGHT - y0) / 2 - 2;
+			//(encoder1.val() % 2) ? display.drawBox( x , y , display.getStrWidth(yes) + 5, display.getMaxCharHeight() + 3) : display.drawFrame(x, y , display.getStrWidth(yes) + 5, display.getMaxCharHeight() + 3);
 
-		x = D_WIDTH / 4 + space;
-		y = (D_HIGHT - y0) / 2;
-		(!encoder1.val() % 2) ? display.drawBox(x, y, display.getStrWidth(no), display.getMaxCharHeight() + 3) : display.drawFrame(x, y, display.getStrWidth(no), display.getMaxCharHeight() + 3);
+			if (encoder1.val() % 2)
+			{
+				x = D_WIDTH / 2 - display.getStrWidth(yes) - space - 3;
+				display.drawFrame(x, y, display.getStrWidth(yes) + 6, display.getMaxCharHeight() + 3);
+			}
+			else
+			{
+				x = D_WIDTH / 2 + space + display.getMaxCharWidth() - 3;
+				display.drawFrame(x, y, display.getStrWidth(no) + 6, display.getMaxCharHeight() + 3);
+			}
 		)
 	} while (!exit);
 
@@ -817,9 +798,9 @@ void showMenuScreen()
     };
 
     MenuItem menu[] = { 
-        MenuItem("SCAN", []() {  CHANNEL = scan(); radio.setChannel(CHANNEL); switchMode(MENU_SCREEN); }),
-        MenuItem("THRTL", []() { showSys(); switchMode(MENU_SCREEN);} ),
-        MenuItem("MODEL"),
+        MenuItem("SCAN",   []() {  CHANNEL = scan(); radio.setChannel(CHANNEL); switchMode(MENU_SCREEN); }),
+        MenuItem("THRTL",  []() { showSys(); switchMode(MENU_SCREEN);} ),
+		MenuItem("MODEL",  []() { showSaveScreen(); switchMode(MENU_SCREEN); } ),
         MenuItem("Back" ,  []() { switchMode(MAIN_SCREEN); }) 
                        };
 
@@ -976,7 +957,7 @@ void setup()
 	pinMode(STS_LED_PIN, OUTPUT);
     pinMode(SLCR_B_PIN, INPUT);
 
-	PCICR = 0b00000111; // enable interupt on all 3 types
+	PCICR = 0b00000111; // enable interrupt on all 3 types
 
 	PCMSK2 = 0b11110000; // Pin 4,5,6,7 - switches
 	PCMSK1 = 0b00000011; // Pin A0 A1 - encoder
@@ -1081,15 +1062,15 @@ ISR(PCINT2_vect) {
 	if (!(PIND & (1 << PD1))) {/* Arduino pin 1 interrupt*/ }
 	if (!(PIND & (1 << PD2))) {/* Arduino pin 2 interrupt*/ }
 	if (!(PIND & (1 << PD3))) {/* Arduino pin 3 interrupt*/ }
-	if (!(PIND & (1 << PD4))) {/* Arduino pin 4 interrupt*/ }
-	if (!(PIND & (1 << PD5))) {/* Arduino pin 5 interrupt*/ }
-	if (!(PIND & (1 << PD6))) {/* Arduino pin 6 interrupt*/ }
-	if (!(PIND & (1 << PD7))) {/* Arduino pin 7 interrupt*/ }
+	if (!(PIND & (1 << PD4))) {/* Arduino pin 4 interrupt*/ LOG_MSG(F("S0"));}
+	if (!(PIND & (1 << PD5))) {/* Arduino pin 5 interrupt*/ LOG_MSG(F("S1"));}
+	if (!(PIND & (1 << PD6))) {/* Arduino pin 6 interrupt*/ LOG_MSG(F("S2"));}
+	if (!(PIND & (1 << PD7))) {/* Arduino pin 7 interrupt*/ LOG_MSG(F("S3"));}
 }
 
 ISR(PCINT1_vect) {
-	if (!(PINC & (1 << PC0))) {/* Arduino pin A0 interrupt*/ }
-	if (!(PINC & (1 << PC1))) {/* Arduino pin A1 interrupt*/ }
+	if (!(PINC & (1 << PC0))) {/* Arduino pin A0 interrupt*/ LOG_MSG(F("A0")); encoder1.run(); }
+	if (!(PINC & (1 << PC1))) {/* Arduino pin A1 interrupt*/ LOG_MSG(F("A1")); }
 	if (!(PINC & (1 << PC2))) {/* Arduino pin A2 interrupt*/ }
 	if (!(PINC & (1 << PC3))) {/* Arduino pin A3 interrupt*/ }
 	if (!(PINC & (1 << PC4))) {/* Arduino pin A4 interrupt*/ }
@@ -1097,7 +1078,7 @@ ISR(PCINT1_vect) {
 }
 
 ISR(PCINT0_vect) {
-	if (!(PINB & (1 << PB0))) {/* Arduino pin 8 interrupt*/ }
+	if (!(PINB & (1 << PB0))) {/* Arduino pin 8 interrupt*/ LOG_MSG(F("8"));}
 	if (!(PINB & (1 << PB1))) {/* Arduino pin 9 interrupt*/ }
 	if (!(PINB & (1 << PB2))) {/* Arduino pin 10 interrupt*/ }
 	if (!(PINB & (1 << PB3))) {/* Arduino pin 12 interrupt*/ }
