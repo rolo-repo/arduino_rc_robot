@@ -733,8 +733,8 @@ short drawTitle ( const char* i_title )
 
 void showSaveScreen()
 {
-	const char* yes = "YES";
-	const char* no = "NO";
+	static const char* yes = "YES";
+	static const char* no = "NO";
 
 	static bool exit = false;
 	encoder1.begin();
@@ -749,7 +749,7 @@ void showSaveScreen()
 			//(switch_[i].getState()) ? display.drawBox(x, y, w, h) : display.drawFrame(x, y, w, h);
 			display.setFont(HEADER_FONT);
 			display.setFontMode(0);
-			display.setDrawColor(2);
+			display.setDrawColor(1);
 			display.drawStr( D_WIDTH / 2 - display.getStrWidth(yes) - space, (D_HIGHT - y0) / 2 + display.getMaxCharHeight(), yes);
 			display.drawStr( D_WIDTH / 2 + space + display.getMaxCharWidth() , (D_HIGHT - y0) / 2 + display.getMaxCharHeight(), no);
 
