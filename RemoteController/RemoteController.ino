@@ -13,7 +13,7 @@
 #include "RFcom.h"
 //++addr &= EEPROM.length() - 1;
 
-
+#include "ScopedGuard.h"
 #include "SerialOutput.h"
 //#include "Constants.h"
 
@@ -60,7 +60,6 @@
 
 char  MAX = 127;
 char  MIN = -127;
-
 
 constexpr short speed = 0;
 constexpr short steering = 1;
@@ -173,6 +172,9 @@ unsigned short &sensSteeringR = J3.sens[0];
 #define D_HALF_WIDTH D_WIDTH / 2
 #define D_HALF_HIGHT D_HIGHT / 2
 
+Button_t *interuptB1 = 0;
+Button_t *interuptB2 = 0;
+
 unsigned char CHANNEL = 0x64;
 
 unsigned char address[][6] = { "1Node" };
@@ -198,6 +200,7 @@ CurrentScreen showScreen;
 void switchMode( Mode i_mode );
 void activateStatusLed(LedAction i_action);
 void handle_interupt();
+void showSaveScreen(void(*i_yes_action)(), void(*i_no_action)());
 
 volatile bool displayRefresh = true;
 void refreshScreen()
@@ -213,7 +216,7 @@ Switch_t( S4_PIN, refreshScreen, refreshScreen)
 };
 
 
-Button_t button1(B1_PIN, []() { DISPLAY(display.drawBox(0, 0, D_WIDTH, D_HIGHT)) }, []() { switchMode(static_cast<Mode>(static_cast<int>(mode) >> 1)); }, []() {  switchMode(static_cast<Mode>(static_cast<int>(mode) << 1)); });
+Button_t button1( B1_PIN, []() { DISPLAY(display.drawBox(0, 0, D_WIDTH, D_HIGHT)) }, []() { switchMode(static_cast<Mode>(static_cast<int>(mode) >> 1)); }, []() {  switchMode(static_cast<Mode>(static_cast<int>(mode) << 1)); });
 
 class InteruptEncoder
 {
@@ -335,10 +338,14 @@ unsigned char scan()
 
 	unsigned char values[num_channels] = { 0 };
 
-    unsigned char the_channel = 0;
+    static unsigned char the_channel = 0;
 
    // static bool  next = true;//because of the button need to put as static
-    Button_t button(B1_PIN, []() { /*next = false;*/switchMode(LAST); });
+	Button_t button( B1_PIN, 
+		[]() { showSaveScreen([]() { CHANNEL = the_channel; }, []() {}); }, 
+		[]() {} , 
+		[]() { showSaveScreen( []() { CHANNEL = the_channel; }, []() {switchMode(LAST); }); } );
+
 	encoder1.begin();
     
 	// Scan all channels num_reps times
@@ -413,7 +420,7 @@ void drawSwitches()
         display.setFontMode(1);//transparent mode
         display.setFont( MEDIUM_FONT );
         display.setFontPosCenter();
-        display.drawStr( ( w - display.getMaxCharWidth() ) / 2  + x + 1 /*border size 1 pixel */ , y +  h >> 1  , String( i + 1 ).c_str() );
+        display.drawStr( ( w - display.getMaxCharWidth() ) / 2  + x + 1 /*border size 1 pixel */ , y +  h >> 1 + 1 , String( i + 1 ).c_str() );
         x += (w + s);
     }
 }
@@ -537,13 +544,14 @@ void showSys()
     const char s = 2;
     
     static short joystick = 0;
-    Button_t button(B1_PIN, []() { joystick++;}, []() { switchMode(LAST); } , []() { switchMode(LAST); });
-	Button_t save_button( SLCR_B_PIN, []() { J4.save(J3.save(J2.save(J1.save(0))));} );
+	Button_t button( B1_PIN, []() { joystick++; }, 
+		[]() { showSaveScreen( []() { J4.save(J3.save(J2.save(J1.save(0)))); }, []() {} ); }, 
+		[]() { showSaveScreen( []() { J4.save(J3.save(J2.save(J1.save(0)))); } ,[]() {switchMode(LAST); }); } );
+	
 	encoder1.begin();
     do
     {
         button.run();
-		save_button.run();
         PIN J_PIN = J1_V_PIN;
 
         switch ( joystick % 4 )
@@ -680,7 +688,6 @@ void showSys()
             }
         
             button.run();
-			save_button.run();
 
             display.setFont(BIG_FONT);
             display.setFontMode(1);//transparent mode
@@ -715,9 +722,6 @@ void showSys()
          */   
         )
     } while ( mode != LAST );
-
-	//encoder1.stop();
-
 }
 
 short drawTitle ( const char* i_title ) 
@@ -731,31 +735,34 @@ short drawTitle ( const char* i_title )
    return display.getAscent() + 3;
 }
 
-void showSaveScreen()
+void showSaveScreen( void ( *i_yes_action )(), void( *i_no_action )())
 {
 	static const char* yes = "YES";
 	static const char* no = "NO";
 
 	static bool exit = false;
+	static void(*yes_action)() = i_yes_action;
+	static void(*no_action)() = i_no_action;
 	encoder1.begin();
-	Button_t save_button(SLCR_B_PIN, []() { exit = true; J4.save(J3.save(J2.save(J1.save(0)))); });
-
+	Button_t save_button( SLCR_B_PIN, []() {  (encoder1.val() % 2) ? yes_action() : no_action(); exit = true; });
+	interuptB1 = &save_button;
+	
+	ScopedGuard guard = makeScopedGuard([]() { interuptB1 = 0; });
+	
 	short x = 0, y = 0, y0 = 0, space = 10;
 	do
 	{
 		DISPLAY
 		(
 			y0 = drawTitle("SAVE");
-			//(switch_[i].getState()) ? display.drawBox(x, y, w, h) : display.drawFrame(x, y, w, h);
-			display.setFont(HEADER_FONT);
+
+			display.setFont(BIG_FONT);
 			display.setFontMode(0);
 			display.setDrawColor(1);
 			display.drawStr( D_WIDTH / 2 - display.getStrWidth(yes) - space, (D_HIGHT - y0) / 2 + display.getMaxCharHeight(), yes);
 			display.drawStr( D_WIDTH / 2 + space + display.getMaxCharWidth() , (D_HIGHT - y0) / 2 + display.getMaxCharHeight(), no);
 
-			//x = D_WIDTH / 2 - display.getStrWidth(yes) - space - 2;
 			y = ( D_HIGHT - y0) / 2 - 2;
-			//(encoder1.val() % 2) ? display.drawBox( x , y , display.getStrWidth(yes) + 5, display.getMaxCharHeight() + 3) : display.drawFrame(x, y , display.getStrWidth(yes) + 5, display.getMaxCharHeight() + 3);
 
 			if (encoder1.val() % 2)
 			{
@@ -769,7 +776,6 @@ void showSaveScreen()
 			}
 		)
 	} while (!exit);
-
 }
 
 void showMenuScreen()
@@ -800,27 +806,31 @@ void showMenuScreen()
     MenuItem menu[] = { 
         MenuItem("SCAN",   []() {  CHANNEL = scan(); radio.setChannel(CHANNEL); switchMode(MENU_SCREEN); }),
         MenuItem("THRTL",  []() { showSys(); switchMode(MENU_SCREEN);} ),
-		MenuItem("MODEL",  []() { showSaveScreen(); switchMode(MENU_SCREEN); } ),
+		MenuItem("MODEL",  []() { DISPLAY(drawTitle(__DATE__)); delay(2000); switchMode(MENU_SCREEN); }),
         MenuItem("Back" ,  []() { switchMode(MAIN_SCREEN); }) 
                        };
 
     short menu_items_count = sizeof (menu) / sizeof( menu[0] );
     short selectedMenu = menu_items_count + 1;
 
-    Button_t button( B1_PIN );
+    //Button_t button( B1_PIN );
+	
 	encoder1.begin();
+
+	ScopedGuard guard = makeScopedGuard([]() { encoder1.stop(); });
+	
 	do
     { 
         short j = encoder1.val() % menu_items_count;
-        
-        if ( button.run() || selectedMenu != j )
+		
+		Button_t button(B1_PIN, menu[j].m_action, []() {}, []() { switchMode(MAIN_SCREEN); });
+		button.run();
+       
+		if ( selectedMenu != j )
         {  
             selectedMenu = j;
-            
-            button = Button_t( B1_PIN, menu[selectedMenu].m_action, []() {}, []() { switchMode(MAIN_SCREEN); });
-            
-            DISPLAY
-            (
+			DISPLAY
+			(
                //draw header
                char y = drawTitle("USER-MENU");
                y += 3;
@@ -851,9 +861,6 @@ void showMenuScreen()
             )
         }
    } while ( mode == MENU_SCREEN );
-
-    encoder1.stop();
-
 }
 
 void switchMode( Mode i_mode = LAST ) 
@@ -965,15 +972,13 @@ void setup()
 
 	activateStatusLed(LedAction::ON);
 
+	J4.load(J3.load(J2.load(J1.load(0))));
+
     J1.zero = analogRead(J1.m_pin);
     J2.zero = analogRead(J2.m_pin);
 
     J3.zero = analogRead(J3.m_pin);
     J4.zero = analogRead(J4.m_pin);
-
-	J4.load( J3.load( J2.load( J1.load(0) ) ) );
-
-
 
     switchMode(MAIN_SCREEN);
 
@@ -1004,10 +1009,10 @@ void loop()
 
     Payload data;
 
-    data.m_b1 = digitalRead(S1_PIN);
-    data.m_b2 = digitalRead(S2_PIN);
-    data.m_b3 = digitalRead(S3_PIN);
-    data.m_b4 = digitalRead(S4_PIN);
+	data.m_b1 = switch_[0].getState();
+    data.m_b2 = switch_[1].getState();
+    data.m_b3 = switch_[2].getState();
+    data.m_b4 = switch_[3].getState();
     
     data.m_speed = J1.read();
     data.m_steering = J3.read();
@@ -1070,7 +1075,7 @@ ISR(PCINT2_vect) {
 
 ISR(PCINT1_vect) {
 	if (!(PINC & (1 << PC0))) {/* Arduino pin A0 interrupt*/ LOG_MSG(F("A0")); encoder1.run(); }
-	if (!(PINC & (1 << PC1))) {/* Arduino pin A1 interrupt*/ LOG_MSG(F("A1")); }
+	if (!(PINC & (1 << PC1))) {/* Arduino pin A1 interrupt*/ LOG_MSG(F("A1")); if (interuptB1) interuptB1->run(); }
 	if (!(PINC & (1 << PC2))) {/* Arduino pin A2 interrupt*/ }
 	if (!(PINC & (1 << PC3))) {/* Arduino pin A3 interrupt*/ }
 	if (!(PINC & (1 << PC4))) {/* Arduino pin A4 interrupt*/ }
@@ -1078,7 +1083,7 @@ ISR(PCINT1_vect) {
 }
 
 ISR(PCINT0_vect) {
-	if (!(PINB & (1 << PB0))) {/* Arduino pin 8 interrupt*/ LOG_MSG(F("8"));}
+	if (!(PINB & (1 << PB0))) {/* Arduino pin 8 interrupt*/ LOG_MSG(F("8")); if (interuptB2) interuptB2->run(); }
 	if (!(PINB & (1 << PB1))) {/* Arduino pin 9 interrupt*/ }
 	if (!(PINB & (1 << PB2))) {/* Arduino pin 10 interrupt*/ }
 	if (!(PINB & (1 << PB3))) {/* Arduino pin 12 interrupt*/ }
