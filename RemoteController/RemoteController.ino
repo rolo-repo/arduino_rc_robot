@@ -545,7 +545,7 @@ void showSys()
 
 	static short joystick = 0;
 	Button_t button(B1_PIN, []() { joystick++; },
-		[]() { showSaveScreen([]() { J4.save(J3.save(J2.save(J1.save(0)))); }, []() {}); },
+		[]() { joystick++; },
 		[]() { showSaveScreen([]() { J4.save(J3.save(J2.save(J1.save(0)))); }, []() {switchMode(LAST); }); });
 
 	encoder1.begin();
