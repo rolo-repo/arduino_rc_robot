@@ -22,6 +22,9 @@
 
 #include "Button.h"
 #include "Switch.h"
+#include "InteruptEncoder.h"
+
+#include "Led.h"
 
 #define PIN unsigned int
 
@@ -64,8 +67,6 @@ char  MIN = -127;
 constexpr short speed = 0;
 constexpr short steering = 1;
 constexpr short not_asighned = 2;
-
-enum class LedAction { ON, OFF, BLYNK };
 
 #define HEADER_FONT u8g2_font_9x15B_tr
 #define SMALL_FONT u8g2_font_micro_tn
@@ -194,92 +195,16 @@ Mode mode = MAIN_SCREEN;
 
 RF24 radio(CE_PIN, SCN_PIN);
 
+Led activityLed(STS_LED_PIN);
+
 using CurrentScreen = void(*)();//pointer to a function responsible for screen representation
 CurrentScreen showScreen;
 
 void switchMode(Mode i_mode);
-void activateStatusLed(LedAction i_action);
-void handle_interupt();
 void showSaveScreen(void(*i_yes_action)(), void(*i_no_action)());
+short drawVline(const short&, const short&);
 
 volatile bool displayRefresh = true;
-void refreshScreen()
-{
-	displayRefresh = true;
-}
-
-Switch_t switch_[] = {
-Switch_t(S1_PIN, refreshScreen, refreshScreen),
-Switch_t(S2_PIN, refreshScreen, refreshScreen),
-Switch_t(S3_PIN, refreshScreen, refreshScreen),
-Switch_t(S4_PIN, refreshScreen, refreshScreen)
-};
-
-
-Button_t button1(B1_PIN, []() { DISPLAY(display.drawBox(0, 0, D_WIDTH, D_HIGHT)) }, []() { switchMode(static_cast<Mode>(static_cast<int>(mode) >> 1)); }, []() {  switchMode(static_cast<Mode>(static_cast<int>(mode) << 1)); });
-
-class InteruptEncoder
-{
-public:
-	InteruptEncoder(PIN i_p1, PIN i_p2) :m_p1(i_p1), m_p2(i_p2) {}
-
-	void begin() volatile
-	{
-		m_val = 0;
-		m_prevNextCode = 3;
-		attachInterrupt(digitalPinToInterrupt(m_p1), handle_interupt, CHANGE);
-		//	attachInterrupt(digitalPinToInterrupt(m_p2), handle_interupt, CHANGE);
-
-	}
-
-	void stop() volatile
-	{
-		detachInterrupt(digitalPinToInterrupt(m_p1));
-	}
-
-	void run() volatile
-	{
-		static char rot_enc_table[] = { 0,1,1,0,1,0,0,1,1,0,0,1,0,1,1,0 };
-
-		m_prevNextCode <<= 2;
-		if (digitalRead(m_p1)) m_prevNextCode |= 0x02;
-		if (digitalRead(m_p2)) m_prevNextCode |= 0x01;
-		m_prevNextCode &= 0x0f;
-
-		// If valid then store as 16 bit data.
-		if (rot_enc_table[m_prevNextCode]) {
-			m_fence <<= 4;
-			m_fence |= m_prevNextCode;
-
-			if ((m_fence & 0xff) == 0x2b && m_val > 0) m_val--;
-			if ((m_fence & 0xff) == 0x17) m_val++;
-		}
-	}
-
-	unsigned short val() volatile const
-	{
-		return m_val;
-	}
-
-
-private:
-
-	PIN m_p1;
-	PIN m_p2;
-	unsigned short m_val = 0;
-	unsigned char m_prevNextCode = 0;
-	unsigned short m_fence = 0;
-};
-
-volatile InteruptEncoder  encoder1(ENC_PIN1, ENC_PIN2);
-
-void handle_interupt()
-{
-	encoder1.run();
-	//LOG_MSG("Encoder" << encoder1.val());
-	activateStatusLed(LedAction::BLYNK);
-	//refreshScreen();
-}
 
 long map(const long x, const long in_min, const long in_max, const long out_min, const long out_max)
 {
@@ -301,35 +226,25 @@ long map(const long x, const long in_min, const long in_max, const long out_min,
 		return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
 
-short drawVline(const short &x, const short &hight = D_HIGHT)
+void refreshScreen()
 {
-	display.setFont(SMALL_FONT/*u8g2_font_5x7_tn */);
-	display.setDrawColor(1);//white color
-
-	(x > D_HALF_WIDTH) ?
-		display.drawStr(x - (display.getMaxCharWidth() + display.getMaxCharWidth() + display.getMaxCharWidth()), D_HIGHT - hight + 2 * display.getMaxCharHeight(), String(x).c_str())
-		: display.drawStr(x + 2, D_HIGHT - hight + 2 * display.getMaxCharHeight(), String(x).c_str());
-	display.drawVLine(x, D_HIGHT - hight, hight);
-
-	return x;
+	displayRefresh = true;
 }
 
-void activateStatusLed(LedAction i_action = LedAction::BLYNK)
-{
-	static unsigned char LED_STS = HIGH;
-	switch (i_action)
-	{
-	case LedAction::OFF:
-		digitalWrite(STS_LED_PIN, (LED_STS = LOW));
-		break;
-	case LedAction::ON:
-		digitalWrite(STS_LED_PIN, (LED_STS = HIGH));
-		break;
-	case LedAction::BLYNK:
-		digitalWrite(STS_LED_PIN, (LED_STS = (LED_STS == HIGH) ? LOW : HIGH));
-		break;
-	}
-}
+Switch_t switch_[] = {
+Switch_t(S1_PIN, refreshScreen, refreshScreen),
+Switch_t(S2_PIN, refreshScreen, refreshScreen),
+Switch_t(S3_PIN, refreshScreen, refreshScreen),
+Switch_t(S4_PIN, refreshScreen, refreshScreen)
+};
+
+Button_t  main_button( B1_PIN, []() { DISPLAY(display.drawBox(0, 0, D_WIDTH, D_HIGHT)) },
+							 []() { switchMode(static_cast<Mode>(static_cast<int>(mode) >> 1)); }, 
+							 []() { switchMode(static_cast<Mode>(static_cast<int>(mode) << 1)); });
+
+
+
+volatile InteruptEncoder_t  slctr( ENC_PIN1, ENC_PIN2 );
 
 unsigned char scan()
 {
@@ -346,7 +261,7 @@ unsigned char scan()
 		[]() { /*showSaveScreen([]() { CHANNEL = the_channel;  switchMode(LAST); }, []() { switchMode(LAST); });*/ },
 		[]() { showSaveScreen([]() { CHANNEL = the_channel; switchMode(LAST); }, []() { switchMode(LAST); }); });
 
-	encoder1.begin();
+	slctr.begin();
 
 	// Scan all channels num_reps times
 	for (unsigned char i = 0; i < num_of_scans && mode != LAST; i++)
@@ -375,20 +290,20 @@ unsigned char scan()
 					}
 				}
 
-			the_channel = drawVline(constrain(encoder1.val(), 0, D_WIDTH), D_HIGHT - 1 - drawTitle("SEL.CHNL"));
+				the_channel = drawVline(constrain(slctr.val(), 0, D_WIDTH), D_HIGHT - 1 - drawTitle("SEL.CHNL"));
 			)
 
 				// Did we get a carrier?
 				if (radio.testCarrier())
 				{
-					activateStatusLed();
+					activityLed.blynk();
 					++values[channel];
 				}
 
 			radio.stopListening(); //it is transmitter stop listening at the end    
 		}
 	}
-	activateStatusLed(LedAction::OFF);
+	activityLed.turn_off();
 	return the_channel;
 }
 
@@ -403,6 +318,18 @@ void drawCoordinates( short x, short y )
 	display.drawVLine( x, 0, D_HIGHT - 1);
 }
 */
+short drawVline(const short &x, const short &hight = D_HIGHT)
+{
+	display.setFont(SMALL_FONT/*u8g2_font_5x7_tn */);
+	display.setDrawColor(1);//white color
+
+	(x > D_HALF_WIDTH) ?
+		display.drawStr(x - (display.getMaxCharWidth() + display.getMaxCharWidth() + display.getMaxCharWidth()), D_HIGHT - hight + 2 * display.getMaxCharHeight(), String(x).c_str())
+		: display.drawStr(x + 2, D_HIGHT - hight + 2 * display.getMaxCharHeight(), String(x).c_str());
+	display.drawVLine(x, D_HIGHT - hight, hight);
+
+	return x;
+}
 void drawSwitches()
 {
 	unsigned char x = D_ZERO_X;
@@ -493,7 +420,7 @@ void showMainScreen()
 
 short trimJ_PLUS(const unsigned short &zero, const int &j_val, unsigned short &sens, short barSize)
 {
-	unsigned short s_val = constrain(encoder1.val(), 0, 1023 - zero);
+	unsigned short s_val = constrain(slctr.val(), 0, 1023 - zero);
 	// sens = constrain( s_val, 0, 1023 - zero );
 	sens = s_val * 5;
 	return constrain(map(j_val, zero, 1023 - sens, 0, barSize), 0, barSize);
@@ -510,7 +437,7 @@ short trimJ_H_Right(const unsigned short &zero, const int &j_val, unsigned short
 
 short trimJ_MINUS(const unsigned short &zero, const int &j_val, unsigned short &sens, short barSize)
 {
-	unsigned short s_val = constrain(encoder1.val(), 0, zero);
+	unsigned short s_val = constrain(slctr.val(), 0, zero);
 	//sens = constrain( s_val, 0, zero );
 	sens = s_val * 5;
 	return constrain(map(j_val, 0 + sens, zero, barSize, 0), 0, barSize);
@@ -546,9 +473,11 @@ void showSys()
 	static short joystick = 0;
 	Button_t button(B1_PIN, []() { joystick++; },
 		[]() { joystick++; },
-		[]() { showSaveScreen([]() { J4.save(J3.save(J2.save(J1.save(0)))); }, []() {switchMode(LAST); }); });
+		[]() { showSaveScreen(  []() { J4.save(J3.save(J2.save(J1.save(0)))); switchMode(LAST); }, 
+								[]() { switchMode(LAST); } ); } 
+	);
 
-	encoder1.begin();
+	slctr.begin();
 	do
 	{
 		button.run();
@@ -747,16 +676,16 @@ void showSaveScreen(void(*i_yes_action)(), void(*i_no_action)())
 	yes_action = i_yes_action;
 	no_action = i_no_action;
 
-	encoder1.begin();
-	Button_t save_button(SLCR_B_PIN, []() {  (encoder1.val() % 2) ? yes_action() : no_action(); exit = true; });
+	slctr.begin();
+	Button_t save_button(B1_PIN, []() {  (slctr.val() % 2) ? yes_action() : no_action(); exit = true; });
 	//interuptB1 = &save_button;
 
 	ScopedGuard guard = makeScopedGuard([]() { interuptB1 = 0; exit = false; });
 
 	short x = 0, y = 0, y0 = 0, space = 10;
+	
 	do
 	{
-
 		DISPLAY
 		(
 			save_button.run();
@@ -770,7 +699,7 @@ void showSaveScreen(void(*i_yes_action)(), void(*i_no_action)())
 
 			y = (D_HIGHT - y0) / 2 - 2;
 
-			if (encoder1.val() % 2)
+			if (slctr.val() % 2)
 			{
 				x = D_WIDTH / 2 - display.getStrWidth(yes) - space - 3;
 				display.drawFrame(x, y, display.getStrWidth(yes) + 6, display.getMaxCharHeight() + 3);
@@ -812,7 +741,7 @@ void showMenuScreen()
 	MenuItem menu[] = {
 		MenuItem("SCAN",   []() { scan(); if (radio.getChannel() != CHANNEL) radio.setChannel(CHANNEL); switchMode(MENU_SCREEN); }),
 		MenuItem("THRTL",  []() { showSys(); switchMode(MENU_SCREEN); }),
-		MenuItem("MODEL",  []() { DISPLAY(drawTitle(__DATE__)); delay(2000); switchMode(MENU_SCREEN); }),
+		MenuItem("MODEL",  []() { DISPLAY(drawTitle(__DATE__); activityLed.fade(2000);) switchMode(MENU_SCREEN); }),
 		MenuItem("Back" ,  []() { switchMode(MAIN_SCREEN); })
 	};
 
@@ -821,15 +750,15 @@ void showMenuScreen()
 
 	Button_t button(B1_PIN);
 
-	encoder1.begin();
+	slctr.begin();
 
-	ScopedGuard guard = makeScopedGuard([]() { encoder1.stop(); });
+	//ScopedGuard guard = makeScopedGuard([]() { slctr.stop(); });
 
 	do
 	{
-		if (button.run() || selectedMenu != encoder1.val() % menu_items_count)
+		if ( button.run() || selectedMenu != slctr.val() % menu_items_count)
 		{
-			selectedMenu = encoder1.val() % menu_items_count;
+			selectedMenu = slctr.val() % menu_items_count;
 
 			button = Button_t(B1_PIN, menu[selectedMenu].m_action, []() {}, []() { switchMode(MAIN_SCREEN); });
 
@@ -837,25 +766,25 @@ void showMenuScreen()
 			(
 				//draw header
 				char y = drawTitle("USER-MENU");
-			y += 3;
-			display.setFont(BIG_FONT/*u8g2_font_8x13_tr*/);
-			display.setDrawColor(2);
-			display.setFontMode(1);//transparent mode
-			for (char i = 0; i < menu_items_count; i++)
-			{
-				char x = (i % 2) ? D_HALF_WIDTH + 1 : 0;
-
-				if (i != 0 && 0 == (i % 2))
-					y += display.getMaxCharHeight();
-
-				if (i == selectedMenu)
+				y += 3;
+				display.setFont(BIG_FONT/*u8g2_font_8x13_tr*/);
+				display.setDrawColor(2);
+				display.setFontMode(1);//transparent mode
+				for (char i = 0; i < menu_items_count; i++)
 				{
-					display.drawFrame(x, y, D_HALF_WIDTH - 1, display.getMaxCharHeight());
-				}
+					char x = (i % 2) ? D_HALF_WIDTH + 1 : 0;
 
-				display.drawStr(x + (D_HALF_WIDTH - display.getStrWidth(menu[i].m_title)) / 2,
-					y + display.getMaxCharHeight(), menu[i].m_title);
-			}
+					if (i != 0 && 0 == (i % 2))
+						y += display.getMaxCharHeight();
+
+					if (i == selectedMenu)
+					{
+						display.drawFrame(x, y, D_HALF_WIDTH - 1, display.getMaxCharHeight());
+					}
+
+					display.drawStr(x + (D_HALF_WIDTH - display.getStrWidth(menu[i].m_title)) / 2,
+						y + display.getMaxCharHeight(), menu[i].m_title);
+				}
 
 			/* drawCoordinates(
 				 map(analogRead(STEERING_PIN), 300 , 900, 0, D_WIDTH),
@@ -863,6 +792,8 @@ void showMenuScreen()
 
 			 selectedMenu = -1;*/
 			)
+
+			activityLed.rapid_blynk(100);
 		}
 	} while (mode == MENU_SCREEN);
 }
@@ -920,12 +851,7 @@ void setup()
 	radio.powerUp();
 	delayMicroseconds(200);
 	radio.stopListening();
-	/*
-	#ifndef ENABLE_LOGGER
-		pinMode(LED2_PIN, OUTPUT);
-		pinMode(B2_PIN, INPUT);
-	#endif
-	*/
+
 	pinMode(J1_V_PIN, INPUT);
 	pinMode(J1_H_PIN, INPUT);
 
@@ -974,7 +900,7 @@ void setup()
 	PCMSK1 = 0b00000011; // Pin A0 A1 - encoder
 	PCMSK0 = 0b00000001; // Pin 8 - main button
 
-	activateStatusLed(LedAction::ON);
+	attachInterrupt(digitalPinToInterrupt(ENC_PIN1), []() {	slctr.run(); activityLed.blynk(); }, CHANGE);
 
 	J4.load(J3.load(J2.load(J1.load(0))));
 
@@ -988,6 +914,8 @@ void setup()
 
 	LOG_MSG(F("Zero values are D1 V,H ") << J1.zero << F(",") << J2.zero);
 	LOG_MSG(F("Zero values are D2 V,H ") << J4.zero << F(",") << J3.zero);
+	
+	activityLed.fade(1000);
 }
 
 void loop()
@@ -1003,7 +931,7 @@ void loop()
 		switch_[i].run();
 	}
 
-	button1.run();
+	main_button.run();
 
 	if (displayRefresh)
 	{
@@ -1018,28 +946,18 @@ void loop()
 	data.m_b3 = switch_[2].getState();
 	data.m_b4 = switch_[3].getState();
 
-	data.m_speed = J1.read();
+	data.m_speed	= J1.read();
 	data.m_steering = J3.read();
 
 	data.m_j[2] = J2.read();
 	data.m_j[3] = J4.read();
 
-	/*
-	data.m_speed = ( analogRead( SPEED_PIN ) >= zeroSpeed ) ?
-		map( analogRead(SPEED_PIN), zeroSpeed, 1023 - sensSpeedUP , 0, MAX ) :
-		map( analogRead(SPEED_PIN), 0 + sensSpeedDOWN , zeroSpeed, MIN, 0 );
-
-	data.m_steering = ( analogRead( STEERING_PIN ) >= zeroSteering ) ?
-		map(analogRead(STEERING_PIN), zeroSteering, 1023 - sensSteeringR , 0, MAX ) :
-		map(analogRead(STEERING_PIN), 0 + sensSteeringL , zeroSteering, MIN, 0 );
-		*/
 	if ((data == transmit_data) && lastTransmitionTime > millis() - arduino::utils::RF_TIMEOUT_MS)
 	{
 		return;//no need to handle ,  nothing changed no timeout occurred
 	}
 
-
-	activateStatusLed();
+	activityLed.blynk();
 	refreshScreen();
 
 	transmit_data = data;
@@ -1057,6 +975,7 @@ void loop()
 
 	if (radio.isAckPayloadAvailable())
 	{
+		activityLed.rapid_blynk(200);
 		radio.read(&payLoadAck, sizeof(payLoadAck));
 	}
 	/*
@@ -1078,7 +997,7 @@ ISR(PCINT2_vect) {
 }
 
 ISR(PCINT1_vect) {
-	if (!(PINC & (1 << PC0))) {/* Arduino pin A0 interrupt*/ LOG_MSG(F("A0")); encoder1.run(); }
+	if (!(PINC & (1 << PC0))) {/* Arduino pin A0 interrupt*/ LOG_MSG(F("A0")); slctr.run(); activityLed.blynk();}
 	if (!(PINC & (1 << PC1))) {/* Arduino pin A1 interrupt*/ LOG_MSG(F("A1")); if (interuptB1) interuptB1->run(); }
 	if (!(PINC & (1 << PC2))) {/* Arduino pin A2 interrupt*/ }
 	if (!(PINC & (1 << PC3))) {/* Arduino pin A3 interrupt*/ }
