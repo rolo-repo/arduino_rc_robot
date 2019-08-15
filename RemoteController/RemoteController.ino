@@ -500,7 +500,7 @@ void showSys()
 
 		DISPLAY
 		(
-			display.setDrawColor(1);//white color
+		display.setDrawColor(1);//white color
 
 		unsigned char y = drawTitle("CONF.JOY") + 1;
 
@@ -661,7 +661,7 @@ short drawTitle(const char* i_title)
 	display.drawStr((D_WIDTH - display.getStrWidth(i_title)) / 2, display.getMaxCharHeight() + D_ZERO_Y, i_title);
 	display.drawHLine(0, D_ZERO_Y + display.getAscent() + 3, D_WIDTH);
 
-	return display.getAscent() + 3;
+	return D_ZERO_Y + display.getAscent() + 3;
 }
 
 void showSaveScreen(void(*i_yes_action)(), void(*i_no_action)())
@@ -741,7 +741,7 @@ void showMenuScreen()
 	MenuItem menu[] = {
 		MenuItem("SCAN",   []() { scan(); if (radio.getChannel() != CHANNEL) radio.setChannel(CHANNEL); switchMode(MENU_SCREEN); }),
 		MenuItem("THRTL",  []() { showSys(); switchMode(MENU_SCREEN); }),
-		MenuItem("MODEL",  []() { DISPLAY(drawTitle(__DATE__); activityLed.fade(2000);) switchMode(MENU_SCREEN); }),
+		MenuItem("MODEL",  []() { DISPLAY(drawTitle(__DATE__); ) activityLed.fade(2000); switchMode(MENU_SCREEN); }),
 		MenuItem("Back" ,  []() { switchMode(MAIN_SCREEN); })
 	};
 
@@ -911,9 +911,9 @@ void setup()
 	J4.zero = analogRead(J4.m_pin);
 
 	switchMode(MAIN_SCREEN);
-
+/*
 	LOG_MSG(F("Zero values are D1 V,H ") << J1.zero << F(",") << J2.zero);
-	LOG_MSG(F("Zero values are D2 V,H ") << J4.zero << F(",") << J3.zero);
+	LOG_MSG(F("Zero values are D2 V,H ") << J4.zero << F(",") << J3.zero);*/
 	
 	activityLed.fade(1000);
 }
