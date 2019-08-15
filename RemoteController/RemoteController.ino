@@ -388,23 +388,57 @@ void drawTelemetry()
 {
 	using namespace arduino::utils;
 
-	unsigned char x0 = 2;
-	unsigned char y0 = 20;
+	constexpr unsigned char x0 = D_ZERO_X ;
+	constexpr unsigned char y0 = 20;
+	constexpr unsigned char t_w = 44;
+	constexpr unsigned char t_h = 44;
+	constexpr unsigned char bar_h = t_h / 2;
+	constexpr unsigned char bar_w = t_w / 4;
 
-	display.setDrawColor(2);
-	display.setFontMode(1);//transparent mode
-	display.setFont(MEDIUM_FONT);
+	display.setDrawColor(1);
+//	display.setFontMode(1);//transparent mode
+//	display.setFont(MEDIUM_FONT);
 
-	display.drawBox(x0, y0, 47 - 2 /* line sizes */, 42);//free space
+	//display.drawFrame( x0, y0, t_h , t_w );
+	
+	Joystick *p_j = 0;
+	display.drawVLine(x0, y0, t_h);
+	for ( char i = 1 , s = 0; i <= 4 ; i++ )
+	{
+		switch (i)
+		{
+		case 1:
+			p_j = &J1;
+			break;
+		case 2:
+			p_j = &J2;
+			break;
+		case 3:
+			p_j = &J3;
+			break;
+		case 4:
+			p_j = &J4;
+			break;
+		}
 
-///    display.drawStr( x0 + ( 47 - 2 ) / 2 , y0 + 42 / 2 + display.getMaxCharHeight(), String(payLoadAck.batteryLevel).c_str());
-  //  display.drawStr( x0 + (47 - 2), y0 + 42 / 2 + 2* display.getMaxCharHeight(), String(payLoadAck.speed).c_str());
+		if ( p_j->read() > 0 )
+		{
+			short t = map( p_j->read(), 0, MAX , 0, bar_h);
+			display.drawBox( x0 + ( i - 1 ) * bar_w + s, y0 +  bar_h - t , bar_w , t);
+		}
+		else
+		{
+			short t = map( p_j->read(), MIN , 0 , bar_h , 0  );
+			display.drawBox( x0 + ( i - 1 )  * bar_w + s, y0 + bar_h, bar_w, t );
+		}
 
-	display.drawStr(x0 + (47 - 2) / 2, y0 + 42 / 2 + display.getMaxCharHeight(), String(J1.read()).c_str());
-	display.drawStr(x0 + (47 - 2) / 2, y0 + 42 / 2 + 2 * display.getMaxCharHeight(), String(J3.read()).c_str());
+		display.drawVLine( x0 + i * bar_w , y0 , t_h );
 
+		s = 1;
+	}
 
-
+	display.setDrawColor(0);
+	display.drawHLine(x0, y0 + bar_h, t_w + 1);
 }
 void showMainScreen()
 {
@@ -464,7 +498,7 @@ void drawType(const short &x, const short &y, short i_function)
 	display.drawStr(x, y, str);
 }
 */
-void showSys()
+void showJoyCfgScreen()
 {
 	const char w = 12;
 	const char b = 1;
@@ -740,7 +774,7 @@ void showMenuScreen()
 
 	MenuItem menu[] = {
 		MenuItem("SCAN",   []() { scan(); if (radio.getChannel() != CHANNEL) radio.setChannel(CHANNEL); switchMode(MENU_SCREEN); }),
-		MenuItem("THRTL",  []() { showSys(); switchMode(MENU_SCREEN); }),
+		MenuItem("THRTL",  []() { showJoyCfgScreen(); switchMode(MENU_SCREEN); }),
 		MenuItem("MODEL",  []() { DISPLAY(drawTitle(__DATE__); ) activityLed.fade(2000); switchMode(MENU_SCREEN); }),
 		MenuItem("Back" ,  []() { switchMode(MAIN_SCREEN); })
 	};
@@ -983,7 +1017,6 @@ void loop()
 		ack.speed        = data.m_speed;
 		*/
 }
-
 
 ISR(PCINT2_vect) {
 	if (!(PIND & (1 << PD0))) {/* Arduino pin 0 interrupt*/ }
