@@ -91,6 +91,10 @@ struct Joystick
 	short read()
 	{
 		short value = analogRead(m_pin);
+
+		if (abs(value - zero) < 10)
+			return zero;
+
 		return (value >= zero)
 			? map(value, zero, 1023 - sens[UP], 0, MAX)
 			: map(value, 0 + sens[DOWN], zero, MIN, 0);
