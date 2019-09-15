@@ -880,6 +880,8 @@ void setup()
 
 	radio.openWritingPipe((const uint8_t*)address[0]);   //мы - труба 0, открываем канал для передачи данных
 	radio.setChannel(CHANNEL);  //выбираем канал (в котором нет шумов!)
+	
+	radio.enableDynamicPayloads();
 
 	radio.setPALevel(RF24_PA_MAX); //уровень мощности передатчика. На выбор RF24_PA_MIN, RF24_PA_LOW, RF24_PA_HIGH, RF24_PA_MAX
 	radio.setDataRate(RF24_250KBPS); //скорость обмена. На выбор RF24_2MBPS, RF24_1MBPS, RF24_250KBPS

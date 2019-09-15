@@ -114,7 +114,7 @@ void setup()
     radio.setRetries(0, 0);     //(время между попыткой достучаться, число попыток)
     radio.enableAckPayload();   
     radio.setPayloadSize(sizeof(Payload)/*32*/);   
-   
+	radio.enableDynamicPayloads();
     radio.openReadingPipe(1, (const uint8_t *)address[0]);    
     radio.setChannel(0x64);
 
