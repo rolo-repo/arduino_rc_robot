@@ -28,8 +28,8 @@ unsigned char address[][6] = { "1Node","2Node","3Node","4Node","5Node","6Node" }
 
 //AF_DCMotor motor(3);
 
-#define MAX_LEFT 0
-#define MAX_RIGHT 90
+#define MAX_LEFT 15
+#define MAX_RIGHT 75
 #define OD_MIN_DISTANCE_CM 5
 
 int SERVO_ZERO = 45;

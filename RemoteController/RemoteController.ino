@@ -4,7 +4,7 @@
 	Author:     NTNET\ROMANL
 */
 #ifndef UNIT_TEST
-//#define ENABLE_LOGGER
+#define ENABLE_LOGGER
 #include <SPI.h>          // библиотека для работы с шиной SPI
 #include "nRF24L01.h"     // библиотека радиомодуля
 #include "RF24.h"         // ещё библиотека радиомодуля
@@ -72,6 +72,12 @@ constexpr short not_asighned = 2;
 #define SMALL_FONT u8g2_font_micro_tn
 #define MEDIUM_FONT u8g2_font_6x12_tn
 #define BIG_FONT u8g2_font_10x20_mr
+
+//U8GLIB_SSD1306_128X64 display(U8G_I2C_OPT_NONE | U8G_I2C_OPT_DEV_0);
+//U8GLIB_SH1106_128X64 display(U8G_I2C_OPT_NONE | U8G_I2C_OPT_DEV_0);
+U8G2_SH1106_128X64_NONAME_2_HW_I2C display(U8G2_R0, /* reset=*/ OLED_RESET);
+#define DISPLAY(...) display.firstPage(); do { __VA_ARGS__ ;} while( display.nextPage() );
+
 
 struct Joystick
 {
@@ -142,6 +148,62 @@ struct Joystick
 		return index;
 	}
 
+	void draw( short i_x0 , short i_y0 , short i_maxW , short i_maxH )
+ 	{
+		short value = this->read();
+		
+		bool horizontal = (i_maxW > i_maxH);
+
+		display.setDrawColor(1);
+		display.drawFrame(i_x0, i_y0, i_maxW, i_maxH);
+
+		//make a single bit black frame , 4 because of 2 for begin and 2 for end
+		i_x0 += 2;
+		i_y0 += 2;
+		i_maxW -= 4;
+		i_maxH -= 4;
+
+		short x_mid = (horizontal) ? (i_x0 + i_maxW / 2) : i_x0;
+		short y_mid = (horizontal) ? i_y0 : (i_y0 + i_maxH / 2);
+		
+		
+		if(horizontal)
+		{
+			if (value > 0)
+			{
+				display.setDrawColor(1);
+				display.drawBox( x_mid, y_mid, map(value, 0, MAX, 0, i_maxW / 2), i_maxH );
+			}
+			else
+			{
+				display.setDrawColor(1);
+				display.drawBox(i_x0, i_y0, i_maxW / 2, i_maxH);
+				display.setDrawColor(0);
+				display.drawBox(i_x0, i_y0, map( MIN - value, MIN, 0, i_maxW / 2 ,0 ), i_maxH );
+			}
+
+			display.setDrawColor(0);
+			display.drawVLine(x_mid - 2, y_mid - 2, i_maxH + 2);
+		}
+		else //vertical
+		{
+			if (value > 0)
+			{
+				display.setDrawColor(1);
+				display.drawBox(i_x0, i_y0, i_maxW, i_maxH / 2);
+				display.setDrawColor(0);
+				display.drawBox(i_x0, i_y0, i_maxW, map( MAX - value, 0, MAX, 0, i_maxH / 2));
+			}
+		    else
+			{
+				display.setDrawColor(1);
+				display.drawBox(i_x0, y_mid, i_maxW, map( value, MIN, 0, i_maxH / 2 , 0 ));
+			}	
+
+			display.setDrawColor(0);
+			display.drawHLine( i_x0 - 2, y_mid , i_maxW + 4);
+		}
+	}
 };
 
 Joystick J1(J1_PIN);
@@ -184,10 +246,6 @@ unsigned char CHANNEL = 0x64;
 
 unsigned char address[][6] = { "1Node" };
 
-//U8GLIB_SSD1306_128X64 display(U8G_I2C_OPT_NONE | U8G_I2C_OPT_DEV_0);
-//U8GLIB_SH1106_128X64 display(U8G_I2C_OPT_NONE | U8G_I2C_OPT_DEV_0);
-U8G2_SH1106_128X64_NONAME_2_HW_I2C display(U8G2_R0, /* reset=*/ OLED_RESET);
-#define DISPLAY(...) display.firstPage(); do { __VA_ARGS__ ;} while( display.nextPage() );
 
 enum Mode {
 	MAIN_SCREEN = 1,
@@ -201,8 +259,8 @@ RF24 radio(CE_PIN, SCN_PIN);
 
 Led activityLed(STS_LED_PIN);
 
-using CurrentScreen = void(*)();//pointer to a function responsible for screen representation
-CurrentScreen showScreen;
+using Screen = void(*)();//pointer to a function responsible for screen representation
+Screen showScreen;
 
 void switchMode(Mode i_mode);
 void showSaveScreen(void(*i_yes_action)(), void(*i_no_action)());
@@ -396,18 +454,15 @@ void drawTelemetry()
 	constexpr unsigned char y0 = 20;
 	constexpr unsigned char t_w = 44;
 	constexpr unsigned char t_h = 44;
-	constexpr unsigned char bar_h = t_h / 2;
 	constexpr unsigned char bar_w = t_w / 4;
 
 	display.setDrawColor(1);
 //	display.setFontMode(1);//transparent mode
 //	display.setFont(MEDIUM_FONT);
 
-	//display.drawFrame( x0, y0, t_h , t_w );
-	
 	Joystick *p_j = 0;
-	display.drawVLine(x0, y0, t_h);
-	for ( char i = 1 , s = 0; i <= 4 ; i++ )
+
+	for ( char i = 1 ; i <= 4 ; i++)
 	{
 		switch (i)
 		{
@@ -425,24 +480,9 @@ void drawTelemetry()
 			break;
 		}
 
-		if ( p_j->read() > 0 )
-		{
-			short t = map( p_j->read(), 0, MAX , 0, bar_h);
-			display.drawBox( x0 + ( i - 1 ) * bar_w + s, y0 +  bar_h - t , bar_w , t);
-		}
-		else
-		{
-			short t = map( p_j->read(), MIN , 0 , bar_h , 0  );
-			display.drawBox( x0 + ( i - 1 )  * bar_w + s, y0 + bar_h, bar_w, t );
-		}
-
-		display.drawVLine( x0 + i * bar_w , y0 , t_h );
-
-		s = 1;
+		p_j->draw( x0 + (i - 1) * ( bar_w + 1 ) , y0, bar_w ,t_h  );
 	}
 
-	display.setDrawColor(0);
-	display.drawHLine(x0, y0 + bar_h, t_w + 1);
 }
 void showMainScreen()
 {
@@ -546,20 +586,23 @@ void showJoyCfgScreen()
 
 		unsigned char y0 = y + s + h / 2;
 
-		display.drawFrame(b, y + s, w, h);//j1
-		display.drawFrame(D_WIDTH - w - b, y + s, w, h);//j4
+		J1.draw(b, y + s, w, h);
+		J4.draw(D_WIDTH - w - b, y + s, w, h);
+		//display.drawFrame(b, y + s, w, h);//j1
+		//display.drawFrame(D_WIDTH - w - b, y + s, w, h);//j4
 
-		display.drawHLine(b - 1, y0, w + 2);//zero line
-		display.drawHLine(D_WIDTH - w - b - 1, y0, w + 2);//zero line
+		//display.drawHLine(b - 1, y0, w + 2);//zero line
+		//display.drawHLine(D_WIDTH - w - b - 1, y0, w + 2);//zero line
 
 		unsigned char x0_1 = b + w + s + h / 2;
 		unsigned char x0_2 = D_WIDTH - w - s - b - h / 2;
 
-		display.drawFrame(b + w + s, D_HIGHT - w, h, w);//j2
-		display.drawFrame(D_WIDTH - w - s - b - h, D_HIGHT - w, h, w);//j3
 
-		display.drawVLine(x0_1, D_HIGHT - w - 1, w);//zero line
-		display.drawVLine(x0_2, D_HIGHT - w - 1, w);//zero line
+		J2.draw(b + w + s, D_HIGHT - w, h, w);//j2
+		J3.draw(D_WIDTH - w - s - b - h, D_HIGHT - w, h, w);//j3
+
+		//display.drawVLine(x0_1, D_HIGHT - w - 1, w);//zero line
+		//display.drawVLine(x0_2, D_HIGHT - w - 1, w);//zero line
 
 		unsigned char dash_X = b + w + s;
 		unsigned char dash_Y = y + s;
@@ -573,18 +616,20 @@ void showJoyCfgScreen()
 			if (j_val >= J1.zero + 30)
 			{
 				unsigned char y_t = trimJ_PLUS(J1.zero, j_val, J1.sens[Joystick::UP], h / 2);
-				display.drawBox(b, y0 - y_t, w, y_t);
+				
+				//display.drawBox(b, y0 - y_t, w, y_t);
 
-				J1.limits[Joystick::LMAX] = max(J1.limits[Joystick::LMAX], j_val);
+				J1.limits[Joystick::LMAX] = max(J1.limits[Joystick::LMAX], j_val - J1.sens[Joystick::UP]);
 			}
 			else if (j_val < J1.zero - 30)
 			{
 				unsigned char y_t = trimJ_MINUS(J1.zero, j_val, J1.sens[Joystick::DOWN], h / 2);
-				display.drawBox(b, y0, w, y_t);
+				//display.drawBox(b, y0, w, y_t);
 
-				J1.limits[Joystick::LMIN] = min(J1.limits[Joystick::LMIN], j_val);
+				J1.limits[Joystick::LMIN] = min(J1.limits[Joystick::LMIN], j_val + J1.sens[Joystick::DOWN]);
 			}
 
+			//J1.draw(b, y0, w, h);
 			//  J1.function = ( analogRead(J3.m_pin) > 1000 ) ? selectedFunction++ % 3  : J1.function;
 		}
 
@@ -595,14 +640,14 @@ void showJoyCfgScreen()
 			if (j_val >= J2.zero + 30)
 			{
 				unsigned char x_t = trimJ_PLUS(J2.zero, j_val, J2.sens[Joystick::RIGHT], h / 2);
-				display.drawBox(x0_1, D_HIGHT - w, x_t, w);
+				//display.drawBox(x0_1, D_HIGHT - w, x_t, w);
 
 				J2.limits[Joystick::LMAX] = max(J2.limits[Joystick::LMAX], j_val);
 			}
 			else if (j_val < J2.zero - 30)
 			{
 				unsigned char x_t = trimJ_MINUS(J2.zero, j_val, J2.sens[Joystick::LEFT], h / 2);
-				display.drawBox(x0_1 - x_t, D_HIGHT - w, x_t, w);
+			//	display.drawBox(x0_1 - x_t, D_HIGHT - w, x_t, w);
 
 				J2.limits[Joystick::LMIN] = min(J2.limits[Joystick::LMIN], j_val);
 			}
@@ -617,14 +662,14 @@ void showJoyCfgScreen()
 			if (j_val >= J3.zero + 30)
 			{
 				unsigned char x_t = trimJ_PLUS(J3.zero, j_val, J3.sens[Joystick::RIGHT], h / 2);
-				display.drawBox(x0_2, D_HIGHT - w, x_t, w);
+				//display.drawBox(x0_2, D_HIGHT - w, x_t, w);
 
 				J3.limits[Joystick::LMAX] = max(J3.limits[Joystick::LMAX], j_val);
 			}
 			else if (j_val < J3.zero - 30)
 			{
 				unsigned char x_t = trimJ_MINUS(J3.zero, j_val, J3.sens[Joystick::LEFT], h / 2);
-				display.drawBox(x0_2 - x_t, D_HIGHT - w, x_t, w);
+				//display.drawBox(x0_2 - x_t, D_HIGHT - w, x_t, w);
 
 				J3.limits[Joystick::LMIN] = min(J3.limits[Joystick::LMIN], j_val);
 			}
@@ -639,14 +684,14 @@ void showJoyCfgScreen()
 			if (j_val >= J4.zero + 30)
 			{
 				unsigned char y_t = trimJ_PLUS(J4.zero, j_val, J4.sens[Joystick::UP], h / 2);
-				display.drawBox(D_WIDTH - b - w, y0 - y_t, w, y_t);
+				//display.drawBox(D_WIDTH - b - w, y0 - y_t, w, y_t);
 
 				J4.limits[Joystick::LMAX] = max(J4.limits[Joystick::LMAX], j_val);
 			}
 			else if (j_val - J4.zero - 30)
 			{
 				unsigned char y_t = trimJ_MINUS(J4.zero, j_val, J4.sens[Joystick::DOWN], h / 2);
-				display.drawBox(D_WIDTH - b - w, y0, w, y_t);
+				//display.drawBox(D_WIDTH - b - w, y0, w, y_t);
 
 				J4.limits[Joystick::LMIN] = min(J4.limits[Joystick::LMIN], j_val);
 			}
@@ -760,20 +805,6 @@ void showMenuScreen()
 		const char* m_title;
 
 		MenuItem(const char *i_title, Action i_action = []() {}) : m_action(i_action), m_title(i_title) {}
-
-		/*
-		void options( const char* i_opt... )
-		{
-			va_list args;
-			va_start(args, i_opt);
-			short i = 0;
-			while ( i_opt != '\0' )
-			{
-				m_options[++i &= sizeof(m_options) / sizeof(String) - 1] = va_arg(args, const char*);
-			}
-			va_end(args);
-		}
-		*/
 	};
 
 	MenuItem menu[] = {
