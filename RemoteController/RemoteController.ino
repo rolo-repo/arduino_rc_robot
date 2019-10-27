@@ -28,13 +28,6 @@
 
 #define PIN unsigned int
 
-/*
-#ifndef ENABLE_LOGGER
-#define LED2_PIN 1
-#define B2_PIN 0
-#endif
-*/
-
 #define STS_LED_PIN 2
 #define SLCR_B_PIN A1
 
@@ -63,6 +56,8 @@
 
 char  MAX = 127;
 char  MIN = -127;
+
+char buff_4[5];
 
 constexpr short speed = 0;
 constexpr short steering = 1;
@@ -102,8 +97,8 @@ struct Joystick
 			//return zero;
 
 		return (value >= zero)
-			? map(value, zero, 1023 - sens[UP], 0, MAX)
-			: map(value, 0 + sens[DOWN], zero, MIN, 0);
+			? map( value, zero, 1023 - sens[UP], 0, MAX)
+			: map( value, 0 + sens[DOWN], zero, MIN, 0);
 	}
 
 	unsigned short save(unsigned short i_idx)
@@ -204,12 +199,36 @@ struct Joystick
 			display.drawHLine( i_x0 - 2, y_mid , i_maxW + 4);
 		}
 	}
+
+	short trim(unsigned short i_trimValue)
+	{
+		if ( read() > 0 )
+		{
+			sens[UP] = constrain(i_trimValue, 0, 1023 - zero);
+		}
+		else
+		{
+			sens[DOWN] = constrain(i_trimValue, 0, zero);
+		}
+
+		return read();
+	}
 };
 
+Joystick joysticks[] = { Joystick(J1_PIN) , Joystick(J2_PIN) ,Joystick(J3_PIN) ,Joystick(J4_PIN) };
+
+#define J1 joysticks[0]
+#define J2 joysticks[1]
+#define J3 joysticks[2]
+#define J4 joysticks[3]
+
+/*
 Joystick J1(J1_PIN);
 Joystick J2(J2_PIN);
 Joystick J3(J3_PIN);
 Joystick J4(J4_PIN);
+*/
+
 
 #define  J1_V_0 J1.zero
 #define  J1_H_0 J2.zero
@@ -264,7 +283,6 @@ Screen showScreen;
 
 void switchMode(Mode i_mode);
 void showSaveScreen(void(*i_yes_action)(), void(*i_no_action)());
-short drawVline(const short&, const short&);
 
 volatile bool displayRefresh = true;
 
@@ -338,6 +356,8 @@ unsigned char scan()
 			// Listen for a little
 			radio.startListening();
 
+			the_channel = constrain(slctr.val(), 0, num_channels);
+			char* channelStr = itoa(the_channel, buff_4, 10);
 			DISPLAY
 			(
 				for (unsigned char j = 0; j < num_channels; j++)
@@ -352,15 +372,27 @@ unsigned char scan()
 					}
 				}
 
-				the_channel = drawVline(constrain(slctr.val(), 0, D_WIDTH), D_HIGHT - 1 - drawTitle("SEL.CHNL"));
-			)
-
-				// Did we get a carrier?
-				if (radio.testCarrier())
+				//the_channel = drawVline( constrain(slctr.val(), 0, D_WIDTH ), D_HIGHT - 1 - drawTitle("SEL.CHNL"));
+				//Draw vertical line representing selected channel
+				[channelStr](unsigned char hight )
 				{
-					activityLed.blynk();
-					++values[channel];
-				}
+					display.setFont(SMALL_FONT/*u8g2_font_5x7_tn */);
+					display.setDrawColor(1);//white color
+
+					(the_channel > D_HALF_WIDTH) ?
+						display.drawStr(the_channel - (display.getMaxCharWidth() + display.getMaxCharWidth() + display.getMaxCharWidth()), D_HIGHT - hight + 2 * display.getMaxCharHeight(), channelStr)
+						: display.drawStr(the_channel + 2, D_HIGHT - hight + 2 * display.getMaxCharHeight(), channelStr);
+					display.drawVLine(the_channel, D_HIGHT - hight, hight);
+				}( D_HIGHT - 1 - drawTitle("SEL.CHNL"));
+				
+			)//DISPLAY
+
+			// Did we get a carrier?
+			if (radio.testCarrier())
+			{
+				activityLed.blynk();
+				++values[channel];
+			}
 
 			radio.stopListening(); //it is transmitter stop listening at the end    
 		}
@@ -380,18 +412,7 @@ void drawCoordinates( short x, short y )
 	display.drawVLine( x, 0, D_HIGHT - 1);
 }
 */
-short drawVline(const short &x, const short &hight = D_HIGHT)
-{
-	display.setFont(SMALL_FONT/*u8g2_font_5x7_tn */);
-	display.setDrawColor(1);//white color
 
-	(x > D_HALF_WIDTH) ?
-		display.drawStr(x - (display.getMaxCharWidth() + display.getMaxCharWidth() + display.getMaxCharWidth()), D_HIGHT - hight + 2 * display.getMaxCharHeight(), String(x).c_str())
-		: display.drawStr(x + 2, D_HIGHT - hight + 2 * display.getMaxCharHeight(), String(x).c_str());
-	display.drawVLine(x, D_HIGHT - hight, hight);
-
-	return x;
-}
 void drawSwitches()
 {
 	unsigned char x = D_ZERO_X;
@@ -409,7 +430,7 @@ void drawSwitches()
 		display.setFontMode(1);//transparent mode
 		display.setFont(MEDIUM_FONT);
 		display.setFontPosCenter();
-		display.drawStr((w - display.getMaxCharWidth()) / 2 + x + 1 /*border size 1 pixel */, 2 + y + h >> 1, String(i + 1).c_str());
+		display.drawStr((w - display.getMaxCharWidth()) / 2 + x + 1 /*border size 1 pixel */, 2 + y + h >> 1, itoa((i + 1),buff_4,10));
 		x += (w + s);
 	}
 }
@@ -419,7 +440,6 @@ void drawChannelNumber()
 	display.setFont(u8g2_font_7Segments_26x42_mn);
 	display.setFontPosBottom();
 
-	String channel = String(CHANNEL);
 	unsigned char s = display.getMaxCharWidth() * 3; // > 100
 
 	if (CHANNEL < 10)
@@ -431,7 +451,7 @@ void drawChannelNumber()
 		s = display.getMaxCharWidth() * 2;
 	}
 
-	display.drawStr(D_WIDTH - 2 - s, D_HIGHT - 2, channel.c_str());
+	display.drawStr(D_WIDTH - 2 - s, D_HIGHT - 2, itoa(CHANNEL, buff_4, 10));
 
 }
 void drawBatteryLevel()
@@ -443,7 +463,7 @@ void drawBatteryLevel()
 	//3 digits 100 %
 	short val = payLoadAck.batteryLevel;// map(analogRead(P1_PIN), 0, 1023, 0, 100);
 
-	display.drawStr(D_WIDTH - 2 - display.getMaxCharWidth() - display.getMaxCharWidth() - display.getMaxCharWidth() - 3, display.getMaxCharHeight(), String(val).c_str());
+	display.drawStr(D_WIDTH - 2 - display.getMaxCharWidth() - display.getMaxCharWidth() - display.getMaxCharWidth() - 3, display.getMaxCharHeight(), itoa(val,buff_4,10));
 	//  display.drawStr(D_WIDTH - 2 - display.getMaxCharWidth(), display.getAscent() + 3, "%");
 }
 void drawTelemetry()
@@ -457,30 +477,10 @@ void drawTelemetry()
 	constexpr unsigned char bar_w = t_w / 4;
 
 	display.setDrawColor(1);
-//	display.setFontMode(1);//transparent mode
-//	display.setFont(MEDIUM_FONT);
 
-	Joystick *p_j = 0;
-
-	for ( char i = 1 ; i <= 4 ; i++)
+	for ( char i = 0 ; i < 4 ; i++)
 	{
-		switch (i)
-		{
-		case 1:
-			p_j = &J1;
-			break;
-		case 2:
-			p_j = &J2;
-			break;
-		case 3:
-			p_j = &J3;
-			break;
-		case 4:
-			p_j = &J4;
-			break;
-		}
-
-		p_j->draw( x0 + (i - 1) * ( bar_w + 1 ) , y0, bar_w ,t_h  );
+		joysticks[i].draw( x0 + (i - 1) * ( bar_w + 1 ) , y0, bar_w ,t_h  );
 	}
 
 }
@@ -495,39 +495,6 @@ void showMainScreen()
 		drawTelemetry();
 	)
 }
-
-short trimJ_PLUS(const unsigned short &zero, const int &j_val, unsigned short &sens, short barSize)
-{
-	unsigned short s_val = constrain(slctr.val(), 0, 1023 - zero);
-	// sens = constrain( s_val, 0, 1023 - zero );
-	sens = s_val * 5;
-	return constrain(map(j_val, zero, 1023 - sens, 0, barSize), 0, barSize);
-}
-
-/*
-short trimJ_H_Right(const unsigned short &zero, const int &j_val, unsigned short &sens, short barSize)
-{
-	unsigned short s_val = constrain( analogRead( SELECTOR_PIN ), 0, 1023 );
-	sens = constrain( map( s_val , 0, 1023, 0, 1023 - zero), 0, 1023 - zero);
-	return constrain( map( j_val, zero, 1023 - sens, 0, barSize), 0, barSize);
-}
-*/
-
-short trimJ_MINUS(const unsigned short &zero, const int &j_val, unsigned short &sens, short barSize)
-{
-	unsigned short s_val = constrain(slctr.val(), 0, zero);
-	//sens = constrain( s_val, 0, zero );
-	sens = s_val * 5;
-	return constrain(map(j_val, 0 + sens, zero, barSize, 0), 0, barSize);
-}
-
-/*
-short trimJ_H_Left (const unsigned short &zero, const int &j_val, unsigned short &sens, short barSize)
-{
-	unsigned short s_val = constrain(analogRead(SELECTOR_PIN), 0, 1023);
-	sens = constrain( map( s_val, 0, 1023, 0, zero ), 0, zero);// 0 - 100%
-	return constrain( map( j_val, 0 + sens, zero, barSize, 0 ), 0, barSize );
-}*/
 
 /*
 void drawType(const short &x, const short &y, short i_function)
@@ -547,8 +514,12 @@ void showJoyCfgScreen()
 	const char w = 12;
 	const char b = 1;
 	const char s = 2;
+	
+	short j_val = 0;
+	Joystick *p_joystick = 0;
 
 	static short joystick = 0;
+
 	Button_t button(B1_PIN, []() { joystick++; },
 		[]() { joystick++; },
 		[]() { showSaveScreen(  []() { J4.save(J3.save(J2.save(J1.save(0)))); switchMode(LAST); }, 
@@ -559,22 +530,6 @@ void showJoyCfgScreen()
 	do
 	{
 		button.run();
-		PIN J_PIN = J1_V_PIN;
-
-		switch (joystick % 4)
-		{
-		case 1:
-			J_PIN = J1_H_PIN;
-			break;
-		case 2:
-			J_PIN = J2_H_PIN;
-			break;
-		case 3:
-			J_PIN = J2_V_PIN;
-			break;
-		}
-
-		short j_val = analogRead(J_PIN);
 
 		DISPLAY
 		(
@@ -588,21 +543,9 @@ void showJoyCfgScreen()
 
 		J1.draw(b, y + s, w, h);
 		J4.draw(D_WIDTH - w - b, y + s, w, h);
-		//display.drawFrame(b, y + s, w, h);//j1
-		//display.drawFrame(D_WIDTH - w - b, y + s, w, h);//j4
-
-		//display.drawHLine(b - 1, y0, w + 2);//zero line
-		//display.drawHLine(D_WIDTH - w - b - 1, y0, w + 2);//zero line
-
-		unsigned char x0_1 = b + w + s + h / 2;
-		unsigned char x0_2 = D_WIDTH - w - s - b - h / 2;
-
-
 		J2.draw(b + w + s, D_HIGHT - w, h, w);//j2
 		J3.draw(D_WIDTH - w - s - b - h, D_HIGHT - w, h, w);//j3
 
-		//display.drawVLine(x0_1, D_HIGHT - w - 1, w);//zero line
-		//display.drawVLine(x0_2, D_HIGHT - w - 1, w);//zero line
 
 		unsigned char dash_X = b + w + s;
 		unsigned char dash_Y = y + s;
@@ -611,28 +554,59 @@ void showJoyCfgScreen()
 
 		if (0 == joystick % 4)
 		{
-			display.drawBox(dash_X, dash_Y, dash_W / 2 - s, dash_H / 2);
+			if (p_joystick != &J1)
+				slctr.begin();
 
-			if (j_val >= J1.zero + 30)
-			{
-				unsigned char y_t = trimJ_PLUS(J1.zero, j_val, J1.sens[Joystick::UP], h / 2);
-				
-				//display.drawBox(b, y0 - y_t, w, y_t);
+			display.drawBox( dash_X, dash_Y, dash_W / 2 - s, dash_H / 2 );
+			p_joystick = &J1;
 
-				J1.limits[Joystick::LMAX] = max(J1.limits[Joystick::LMAX], j_val - J1.sens[Joystick::UP]);
-			}
-			else if (j_val < J1.zero - 30)
-			{
-				unsigned char y_t = trimJ_MINUS(J1.zero, j_val, J1.sens[Joystick::DOWN], h / 2);
-				//display.drawBox(b, y0, w, y_t);
-
-				J1.limits[Joystick::LMIN] = min(J1.limits[Joystick::LMIN], j_val + J1.sens[Joystick::DOWN]);
-			}
-
-			//J1.draw(b, y0, w, h);
 			//  J1.function = ( analogRead(J3.m_pin) > 1000 ) ? selectedFunction++ % 3  : J1.function;
 		}
 
+		else if (1 == joystick % 4)
+		{
+			if (p_joystick != &J2)
+				slctr.begin();
+
+			display.drawBox(dash_X, dash_Y + dash_H / 2, dash_W / 2 - s, dash_H / 2);
+			p_joystick = &J2;
+		}
+
+		else if (2 == joystick % 4)
+		{
+			if (p_joystick != &J3)
+				slctr.begin();
+
+			display.drawBox(dash_X + dash_W / 2, dash_Y + dash_H / 2, dash_W / 2 - s, dash_H / 2);
+			p_joystick = &J3;
+		}
+
+		else if (3 == joystick % 4)
+		{
+			if (p_joystick != &J4)
+				slctr.begin();
+
+			display.drawBox(dash_X + dash_W / 2, dash_Y, dash_W / 2 - s, dash_H / 2);
+			p_joystick = &J4;
+		}
+
+		if ( p_joystick->read() > 20 )
+		{
+			j_val = p_joystick->trim( slctr.val() * 5 );
+	
+			p_joystick->limits[Joystick::LMAX] = max(p_joystick->limits[Joystick::LMAX], j_val);
+		}
+		else if ( p_joystick->read() < -20 )
+		{
+			j_val = p_joystick->trim( slctr.val() * 5 );
+		
+			p_joystick->limits[Joystick::LMIN] = min(p_joystick->limits[Joystick::LMIN], j_val);
+		}
+		else
+		{
+			slctr.begin();
+		}
+		/*
 		if (1 == joystick % 4)
 		{
 			display.drawBox(dash_X, dash_Y + dash_H / 2, dash_W / 2 - s, dash_H / 2);
@@ -640,14 +614,12 @@ void showJoyCfgScreen()
 			if (j_val >= J2.zero + 30)
 			{
 				unsigned char x_t = trimJ_PLUS(J2.zero, j_val, J2.sens[Joystick::RIGHT], h / 2);
-				//display.drawBox(x0_1, D_HIGHT - w, x_t, w);
 
 				J2.limits[Joystick::LMAX] = max(J2.limits[Joystick::LMAX], j_val);
 			}
 			else if (j_val < J2.zero - 30)
 			{
 				unsigned char x_t = trimJ_MINUS(J2.zero, j_val, J2.sens[Joystick::LEFT], h / 2);
-			//	display.drawBox(x0_1 - x_t, D_HIGHT - w, x_t, w);
 
 				J2.limits[Joystick::LMIN] = min(J2.limits[Joystick::LMIN], j_val);
 			}
@@ -662,14 +634,12 @@ void showJoyCfgScreen()
 			if (j_val >= J3.zero + 30)
 			{
 				unsigned char x_t = trimJ_PLUS(J3.zero, j_val, J3.sens[Joystick::RIGHT], h / 2);
-				//display.drawBox(x0_2, D_HIGHT - w, x_t, w);
 
 				J3.limits[Joystick::LMAX] = max(J3.limits[Joystick::LMAX], j_val);
 			}
 			else if (j_val < J3.zero - 30)
 			{
 				unsigned char x_t = trimJ_MINUS(J3.zero, j_val, J3.sens[Joystick::LEFT], h / 2);
-				//display.drawBox(x0_2 - x_t, D_HIGHT - w, x_t, w);
 
 				J3.limits[Joystick::LMIN] = min(J3.limits[Joystick::LMIN], j_val);
 			}
@@ -684,21 +654,19 @@ void showJoyCfgScreen()
 			if (j_val >= J4.zero + 30)
 			{
 				unsigned char y_t = trimJ_PLUS(J4.zero, j_val, J4.sens[Joystick::UP], h / 2);
-				//display.drawBox(D_WIDTH - b - w, y0 - y_t, w, y_t);
 
 				J4.limits[Joystick::LMAX] = max(J4.limits[Joystick::LMAX], j_val);
 			}
 			else if (j_val - J4.zero - 30)
 			{
 				unsigned char y_t = trimJ_MINUS(J4.zero, j_val, J4.sens[Joystick::DOWN], h / 2);
-				//display.drawBox(D_WIDTH - b - w, y0, w, y_t);
 
 				J4.limits[Joystick::LMIN] = min(J4.limits[Joystick::LMIN], j_val);
 			}
 
 			//  J4.function = ( analogRead(J3.m_pin) > 1000 ) ? selectedFunction++ % 3  : J4.function;
 		}
-
+		*/
 		button.run();
 
 		display.setFont(BIG_FONT);
@@ -713,18 +681,18 @@ void showJoyCfgScreen()
 
 		unsigned char strSize = display.getStrWidth("XX");
 		display.setFont(SMALL_FONT);
+		
+		display.drawStr(dash_X + strSize + s, dash_Y + 2 * display.getMaxCharHeight() - 2, itoa( J1.limits[Joystick::LMAX],buff_4 ,10));
+		display.drawStr(dash_X + strSize + s, dash_Y + 3 * display.getMaxCharHeight(), itoa( J1.limits[Joystick::LMIN],buff_4,-10 ));
 
-		display.drawStr(dash_X + strSize + s, dash_Y + 2 * display.getMaxCharHeight() - 2, String(map(J1.limits[Joystick::LMAX], J1.zero, 1023 - J1.sens[Joystick::UP], 0, MAX)).c_str());
-		display.drawStr(dash_X + strSize + s, dash_Y + 3 * display.getMaxCharHeight(), String(-(map(J1.limits[Joystick::LMIN], J1.sens[Joystick::DOWN], J1.zero, MIN, 0))).c_str());
+		display.drawStr(dash_X + strSize + s, dash_Y + 2 * display.getMaxCharHeight() - 2 + dash_H / 2, itoa( J2.limits[Joystick::LMAX],buff_4,10));
+		display.drawStr(dash_X + strSize + s, dash_Y + 3 * display.getMaxCharHeight() + dash_H / 2, itoa( J2.limits[Joystick::LMIN],buff_4,-10));
 
-		display.drawStr(dash_X + strSize + s, dash_Y + 2 * display.getMaxCharHeight() - 2 + dash_H / 2, String(map(J2.limits[Joystick::LMAX], J2.zero, 1023 - J2.sens[Joystick::UP], 0, MAX)).c_str());
-		display.drawStr(dash_X + strSize + s, dash_Y + 3 * display.getMaxCharHeight() + dash_H / 2, String(-(map(J2.limits[Joystick::LMIN], J2.sens[Joystick::DOWN], J2.zero, MIN, 0))).c_str());
+		display.drawStr(dash_X - strSize + dash_W - 5 * display.getMaxCharWidth(), dash_Y + 2 * display.getMaxCharHeight() - 2 + dash_H / 2, itoa( J3.limits[Joystick::LMAX], buff_4,10 ));
+		display.drawStr(dash_X - strSize + dash_W - 5 * display.getMaxCharWidth(), dash_Y + 3 * display.getMaxCharHeight() + dash_H / 2, itoa( J3.limits[Joystick::LMIN], buff_4,-10 ));
 
-		display.drawStr(dash_X - strSize + dash_W - 5 * display.getMaxCharWidth(), dash_Y + 2 * display.getMaxCharHeight() - 2 + dash_H / 2, String(map(J3.limits[Joystick::LMAX], J3.zero, 1023 - J3.sens[Joystick::UP], 0, MAX)).c_str());
-		display.drawStr(dash_X - strSize + dash_W - 5 * display.getMaxCharWidth(), dash_Y + 3 * display.getMaxCharHeight() + dash_H / 2, String(-(map(J3.limits[Joystick::LMIN], J3.sens[Joystick::DOWN], J3.zero, MIN, 0))).c_str());
-
-		display.drawStr(dash_X - strSize + dash_W - 5 * display.getMaxCharWidth(), dash_Y + 2 * display.getMaxCharHeight() - 2, String(map(J4.limits[Joystick::LMAX], J4.zero, 1023 - J4.sens[Joystick::UP], 0, MAX)).c_str());
-		display.drawStr(dash_X - strSize + dash_W - 5 * display.getMaxCharWidth(), dash_Y + 3 * display.getMaxCharHeight(), String(-(map(J4.limits[Joystick::LMIN], J4.sens[Joystick::DOWN], J4.zero, MIN, 0))).c_str());
+		display.drawStr(dash_X - strSize + dash_W - 5 * display.getMaxCharWidth(), dash_Y + 2 * display.getMaxCharHeight() - 2, itoa( J4.limits[Joystick::LMAX], buff_4 ,10));
+		display.drawStr(dash_X - strSize + dash_W - 5 * display.getMaxCharWidth(), dash_Y + 3 * display.getMaxCharHeight(), itoa( J4.limits[Joystick::LMIN], buff_4 ,-10));
 
 		/*
 		   drawType(dash_X, dash_Y + dash_H / 2 - s  , J1.function );
@@ -759,7 +727,6 @@ void showSaveScreen(void(*i_yes_action)(), void(*i_no_action)())
 	yes_action = i_yes_action;
 	no_action = i_no_action;
 
-	slctr.begin();
 	Button_t save_button(B1_PIN, []() {  (slctr.val() % 2) ? yes_action() : no_action(); exit = true; });
 	//interuptB1 = &save_button;
 
