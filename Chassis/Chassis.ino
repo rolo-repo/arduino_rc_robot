@@ -24,7 +24,10 @@
 unsigned char address[][6] = { "1Node","2Node","3Node","4Node","5Node","6Node" }; // pipe address
 //char recieved_data[4];
 
-
+//On boards other than the Mega, use of the library disables analogWrite() 
+//(PWM) functionality on pins 9 and 10, whether or not there is a Servo on those pins.
+// On the Mega, up to 12 servos can be used without interfering with PWM functionality; 
+// use of 12 to 23 motors will disable PWM on pins 11 and 12
 
 //AF_DCMotor motor(3);
 
@@ -200,7 +203,10 @@ void loop()
 
     while ( radio.available(&pipeNo) ) 
     {   
-		//led.blynk();
+		payLoadAck.speed = 0;
+
+		payLoadAck.batteryLevel = servo.read();
+		radio.writeAckPayload(pipeNo, &payLoadAck, sizeof(payLoadAck));
 
         radio.read(&recieved_data, sizeof(recieved_data));
        /* bool sts[3];
@@ -220,7 +226,8 @@ void loop()
              << ((recieved_data.m_steering > 0) ? F(" LEFT") : F(" RIGHT"))) ;
 
 		led.blynk(Led::Brightness::_100);
-        if ( recieved_data.m_speed > 0 )
+        
+		if ( recieved_data.m_speed > 0 )
         {
             motor.backward( map( recieved_data.m_speed, 0, 127, 0, 255 ) );
         }
@@ -267,7 +274,6 @@ void loop()
         curSteering = servo.read();
 
 		led.fade(500);
-		//digitalWrite(A0, LED = (LED == HIGH) ? LOW : HIGH);
     }
 }
 

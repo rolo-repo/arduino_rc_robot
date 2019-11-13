@@ -148,6 +148,26 @@ test(compare_not_equal)
 	
 	assertEqual(data1 == data2, false);
 }
+
+
+test(save_and_load)
+{
+	using namespace arduino::utils;
+
+	Joystick j;
+
+	j.zero = 5;
+	j.save(0);
+
+	Joystick j1;
+
+	j1.load(0);
+
+	assertEqual( j1.zero, 5 );
+
+//	assertEqual( j1 == j , true)
+}
+
 void setup() {
 	delay(1000); // wait for stability on some boards to prevent garbage Serial
 	Serial.begin(115200); // ESP8266 default of 74880 not supported on Linux

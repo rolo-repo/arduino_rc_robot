@@ -74,36 +74,54 @@ U8G2_SH1106_128X64_NONAME_2_HW_I2C display(U8G2_R0, /* reset=*/ OLED_RESET);
 #define DISPLAY(...) display.firstPage(); do { __VA_ARGS__ ;} while( display.nextPage() );
 
 
+
 struct Joystick
 {
-	enum Side { UP = 0, DOWN = 1, RIGHT = 0, LEFT = 1, LMAX = 0, LMIN = 1 };
-
+	enum Side { UP = 0, DOWN = 1, RIGHT = 0, LEFT = 1 };
+private:
 	unsigned short zero = 0;
 	unsigned short sens[2] = { 0 , 0 };
-	short limits[2] = { MAX , MAX };
 
 	short function;
-	bool isSwitched = false;
 
-	PIN m_pin;
+	//typedef short(Joystick::*adjust)(const long&) const ;
+	using formula = short(Joystick::*)(const long&) const;
+	formula m_formula;
 
-	Joystick(PIN i_pin) : m_pin(i_pin), function(not_asighned) {}
+	PIN m_pin = 0;
+public:
+	Joystick(PIN i_pin) : m_pin(i_pin), function(not_asighned), m_formula(&(this->parabola127)) {}
 
 	short read()
 	{
 		short value = analogRead(m_pin);
 
-		//if (abs(value - zero) < 10)
-			//return zero;
+		if (abs(value - zero) < 10)
+			return zero;
 
-		return (value >= zero)
-			? map( value, zero, 1023 - sens[UP], 0, MAX)
-			: map( value, 0 + sens[DOWN], zero, MIN, 0);
+		return constrain((this->*m_formula)((value >= zero)
+			? map(value, zero, 1023 - sens[UP], 0, MAX)
+			: map(value, 0 + sens[DOWN], zero, MIN, 0)
+			)
+			, MIN, MAX);
+	}
+private:
+	short linear(const long& i_value) const
+	{
+		return i_value;
 	}
 
+	short parabola127(const long& i_value) const
+	{
+		return (short)(float(i_value * i_value) / float(127));
+	}
+
+public:
 	unsigned short save(unsigned short i_idx)
 	{
 		unsigned short index = i_idx;
+
+		EEPROM.update(index++, 0b11001100);
 
 		const unsigned char *t = (const unsigned char*)sens;
 
@@ -112,12 +130,8 @@ struct Joystick
 			EEPROM.update(index++, t[i]);
 		}
 
-		t = (const unsigned char*)limits;
-
-		for (auto i = 0; i < 2 * sizeof(limits); i++)
-		{
-			EEPROM.update(index++, t[i]);
-		}
+		EEPROM.update(index++, (unsigned char)zero);
+		EEPROM.update(index++, (unsigned char)(zero >> 8));
 
 		return index;
 	}
@@ -126,27 +140,27 @@ struct Joystick
 	{
 		unsigned short index = i_idx;
 
-		unsigned char *t = (unsigned char*)sens;
-
-		for (auto i = 0; i < 2 * sizeof(sens); i++)
+		if (0b11001100 == EEPROM.read(index))
 		{
-			t[i] = EEPROM.read(index++);
-		}
+			unsigned char *t = (unsigned char*)sens;
 
-		t = (unsigned char*)limits;
+			for (auto i = 0; i < 2 * sizeof(sens); i++)
+			{
+				t[i] = EEPROM.read(index++);
+			}
 
-		for (auto i = 0; i < 2 * sizeof(limits); i++)
-		{
-			t[i] = EEPROM.read(index++);
+
+			zero = EEPROM.read(index++);
+			zero |= EEPROM.read(index++) << 8;
 		}
 
 		return index;
 	}
 
-	void draw( short i_x0 , short i_y0 , short i_maxW , short i_maxH )
- 	{
+	void draw(short i_x0, short i_y0, short i_maxW, short i_maxH) const
+	{
 		short value = this->read();
-		
+
 		bool horizontal = (i_maxW > i_maxH);
 
 		display.setDrawColor(1);
@@ -160,21 +174,21 @@ struct Joystick
 
 		short x_mid = (horizontal) ? (i_x0 + i_maxW / 2) : i_x0;
 		short y_mid = (horizontal) ? i_y0 : (i_y0 + i_maxH / 2);
-		
-		
-		if(horizontal)
+
+
+		if (horizontal)
 		{
 			if (value > 0)
 			{
 				display.setDrawColor(1);
-				display.drawBox( x_mid, y_mid, map(value, 0, MAX, 0, i_maxW / 2), i_maxH );
+				display.drawBox(x_mid, y_mid, map(value, 0, MAX, 0, i_maxW / 2), i_maxH);
 			}
 			else
 			{
 				display.setDrawColor(1);
 				display.drawBox(i_x0, i_y0, i_maxW / 2, i_maxH);
 				display.setDrawColor(0);
-				display.drawBox(i_x0, i_y0, map( MIN - value, MIN, 0, i_maxW / 2 ,0 ), i_maxH );
+				display.drawBox(i_x0, i_y0, map(MIN - value, MIN, 0, i_maxW / 2, 0), i_maxH);
 			}
 
 			display.setDrawColor(0);
@@ -187,22 +201,22 @@ struct Joystick
 				display.setDrawColor(1);
 				display.drawBox(i_x0, i_y0, i_maxW, i_maxH / 2);
 				display.setDrawColor(0);
-				display.drawBox(i_x0, i_y0, i_maxW, map( MAX - value, 0, MAX, 0, i_maxH / 2));
+				display.drawBox(i_x0, i_y0, i_maxW, map(MAX - value, 0, MAX, 0, i_maxH / 2));
 			}
-		    else
+			else
 			{
 				display.setDrawColor(1);
-				display.drawBox(i_x0, y_mid, i_maxW, map( value, MIN, 0, i_maxH / 2 , 0 ));
-			}	
+				display.drawBox(i_x0, y_mid, i_maxW, map(value, MIN, 0, i_maxH / 2, 0));
+			}
 
 			display.setDrawColor(0);
-			display.drawHLine( i_x0 - 2, y_mid , i_maxW + 4);
+			display.drawHLine(i_x0 - 2, y_mid, i_maxW + 4);
 		}
 	}
 
 	short trim(unsigned short i_trimValue)
 	{
-		if ( read() > 0 )
+		if (read() > 0)
 		{
 			sens[UP] = constrain(i_trimValue, 0, 1023 - zero);
 		}
@@ -213,6 +227,18 @@ struct Joystick
 
 		return read();
 	}
+
+	void reset()
+	{
+		short t_zero = analogRead(m_pin);
+		if (0 != zero)
+		{
+			sens[UP] += (zero - t_zero);
+			sens[DOWN] -= (zero - t_zero);
+		}
+		zero = t_zero;
+	}
+
 };
 
 Joystick joysticks[] = { Joystick(J1_PIN) , Joystick(J2_PIN) ,Joystick(J3_PIN) ,Joystick(J4_PIN) };
@@ -222,32 +248,11 @@ Joystick joysticks[] = { Joystick(J1_PIN) , Joystick(J2_PIN) ,Joystick(J3_PIN) ,
 #define J3 joysticks[2]
 #define J4 joysticks[3]
 
-/*
-Joystick J1(J1_PIN);
-Joystick J2(J2_PIN);
-Joystick J3(J3_PIN);
-Joystick J4(J4_PIN);
-*/
-
-
-#define  J1_V_0 J1.zero
-#define  J1_H_0 J2.zero
-
-#define  J2_V_0 J4.zero
-#define  J2_H_0 J3.zero
-
 //////////////////////////////////////////////////////////////////////////
 
 PIN  SPEED_PIN = J1_V_PIN;
 PIN  STEERING_PIN = J2_H_PIN;
 
-unsigned short &zeroSpeed = J1_V_0;
-unsigned short &zeroSteering = J2_H_0;
-
-unsigned short &sensSpeedUP = J1.sens[0];
-unsigned short &sensSpeedDOWN = J1.sens[1];
-unsigned short &sensSteeringL = J3.sens[1];
-unsigned short &sensSteeringR = J3.sens[0];
 //////////////////////////////////////////////////////////////////////////
 #define DISPLAY_128_64
 #define DISPLAY_I2C_ADDRESS 0x78
@@ -318,13 +323,13 @@ Switch_t(S3_PIN, refreshScreen, refreshScreen),
 Switch_t(S4_PIN, refreshScreen, refreshScreen)
 };
 
-Button_t  main_button( B1_PIN, []() { DISPLAY(display.drawBox(0, 0, D_WIDTH, D_HIGHT)) },
-							 []() { switchMode(static_cast<Mode>(static_cast<int>(mode) >> 1)); }, 
-							 []() { switchMode(static_cast<Mode>(static_cast<int>(mode) << 1)); });
+Button_t  main_button(B1_PIN, []() { DISPLAY(display.drawBox(0, 0, D_WIDTH, D_HIGHT)) },
+	[]() { switchMode(static_cast<Mode>(static_cast<int>(mode) >> 1)); },
+	[]() { switchMode(static_cast<Mode>(static_cast<int>(mode) << 1)); });
 
 
 
-volatile InteruptEncoder_t  slctr( ENC_PIN1, ENC_PIN2 );
+volatile InteruptEncoder_t  slctr(ENC_PIN1, ENC_PIN2);
 
 unsigned char scan()
 {
@@ -372,27 +377,27 @@ unsigned char scan()
 					}
 				}
 
-				//the_channel = drawVline( constrain(slctr.val(), 0, D_WIDTH ), D_HIGHT - 1 - drawTitle("SEL.CHNL"));
-				//Draw vertical line representing selected channel
-				[channelStr](unsigned char hight )
-				{
-					display.setFont(SMALL_FONT/*u8g2_font_5x7_tn */);
-					display.setDrawColor(1);//white color
+			//the_channel = drawVline( constrain(slctr.val(), 0, D_WIDTH ), D_HIGHT - 1 - drawTitle("SEL.CHNL"));
+			//Draw vertical line representing selected channel
+			[channelStr](unsigned char hight)
+			{
+				display.setFont(SMALL_FONT/*u8g2_font_5x7_tn */);
+				display.setDrawColor(1);//white color
 
-					(the_channel > D_HALF_WIDTH) ?
-						display.drawStr(the_channel - (display.getMaxCharWidth() + display.getMaxCharWidth() + display.getMaxCharWidth()), D_HIGHT - hight + 2 * display.getMaxCharHeight(), channelStr)
-						: display.drawStr(the_channel + 2, D_HIGHT - hight + 2 * display.getMaxCharHeight(), channelStr);
-					display.drawVLine(the_channel, D_HIGHT - hight, hight);
-				}( D_HIGHT - 1 - drawTitle("SEL.CHNL"));
-				
+				(the_channel > D_HALF_WIDTH) ?
+					display.drawStr(the_channel - (display.getMaxCharWidth() + display.getMaxCharWidth() + display.getMaxCharWidth()), D_HIGHT - hight + 2 * display.getMaxCharHeight(), channelStr)
+					: display.drawStr(the_channel + 2, D_HIGHT - hight + 2 * display.getMaxCharHeight(), channelStr);
+				display.drawVLine(the_channel, D_HIGHT - hight, hight);
+			}(D_HIGHT - 1 - drawTitle("SEL.CHNL"));
+
 			)//DISPLAY
 
 			// Did we get a carrier?
-			if (radio.testCarrier())
-			{
-				activityLed.blynk();
-				++values[channel];
-			}
+				if (radio.testCarrier())
+				{
+					activityLed.blynk();
+					++values[channel];
+				}
 
 			radio.stopListening(); //it is transmitter stop listening at the end    
 		}
@@ -430,7 +435,7 @@ void drawSwitches()
 		display.setFontMode(1);//transparent mode
 		display.setFont(MEDIUM_FONT);
 		display.setFontPosCenter();
-		display.drawStr((w - display.getMaxCharWidth()) / 2 + x + 1 /*border size 1 pixel */, 2 + y + h >> 1, itoa((i + 1),buff_4,10));
+		display.drawStr((w - display.getMaxCharWidth()) / 2 + x + 1 /*border size 1 pixel */, 2 + y + h >> 1, itoa((i + 1), buff_4, 10));
 		x += (w + s);
 	}
 }
@@ -463,14 +468,14 @@ void drawBatteryLevel()
 	//3 digits 100 %
 	short val = payLoadAck.batteryLevel;// map(analogRead(P1_PIN), 0, 1023, 0, 100);
 
-	display.drawStr(D_WIDTH - 2 - display.getMaxCharWidth() - display.getMaxCharWidth() - display.getMaxCharWidth() - 3, display.getMaxCharHeight(), itoa(val,buff_4,10));
+	display.drawStr(D_WIDTH - 2 - display.getMaxCharWidth() - display.getMaxCharWidth() - display.getMaxCharWidth() - 3, display.getMaxCharHeight(), itoa(val, buff_4, 10));
 	//  display.drawStr(D_WIDTH - 2 - display.getMaxCharWidth(), display.getAscent() + 3, "%");
 }
 void drawTelemetry()
 {
 	using namespace arduino::utils;
 
-	constexpr unsigned char x0 = D_ZERO_X ;
+	constexpr unsigned char x0 = D_ZERO_X;
 	constexpr unsigned char y0 = 20;
 	constexpr unsigned char t_w = 44;
 	constexpr unsigned char t_h = 44;
@@ -478,9 +483,9 @@ void drawTelemetry()
 
 	display.setDrawColor(1);
 
-	for ( char i = 0 ; i < 4 ; i++)
+	for (char i = 0; i < 4; i++)
 	{
-		joysticks[i].draw( x0 + (i - 1) * ( bar_w + 1 ) , y0, bar_w ,t_h  );
+		joysticks[i].draw(x0 + i * (bar_w + 1), y0, bar_w, t_h);
 	}
 
 }
@@ -490,9 +495,9 @@ void showMainScreen()
 	(
 		//  display.drawFrame(1, 1, D_WIDTH, D_HIGHT);
 		drawSwitches();
-		drawBatteryLevel();
-		drawChannelNumber();
-		drawTelemetry();
+	drawBatteryLevel();
+	drawChannelNumber();
+	drawTelemetry();
 	)
 }
 
@@ -514,7 +519,7 @@ void showJoyCfgScreen()
 	const char w = 12;
 	const char b = 1;
 	const char s = 2;
-	
+
 	short j_val = 0;
 	Joystick *p_joystick = 0;
 
@@ -522,8 +527,8 @@ void showJoyCfgScreen()
 
 	Button_t button(B1_PIN, []() { joystick++; },
 		[]() { joystick++; },
-		[]() { showSaveScreen(  []() { J4.save(J3.save(J2.save(J1.save(0)))); switchMode(LAST); }, 
-								[]() { switchMode(LAST); } ); } 
+		[]() { showSaveScreen([]() { J4.save(J3.save(J2.save(J1.save(0)))); switchMode(LAST); },
+			[]() { switchMode(LAST); }); }
 	);
 
 	slctr.begin();
@@ -533,7 +538,7 @@ void showJoyCfgScreen()
 
 		DISPLAY
 		(
-		display.setDrawColor(1);//white color
+			display.setDrawColor(1);//white color
 
 		unsigned char y = drawTitle("CONF.JOY") + 1;
 
@@ -552,12 +557,14 @@ void showJoyCfgScreen()
 		unsigned char dash_W = D_WIDTH - 2 * w - 2 * s;
 		unsigned char dash_H = D_HIGHT - y - w - 2 * s;
 
+		display.setDrawColor(1);
+
 		if (0 == joystick % 4)
 		{
 			if (p_joystick != &J1)
 				slctr.begin();
 
-			display.drawBox( dash_X, dash_Y, dash_W / 2 - s, dash_H / 2 );
+			display.drawBox(dash_X, dash_Y, dash_W / 2 - s, dash_H / 2 + s);
 			p_joystick = &J1;
 
 			//  J1.function = ( analogRead(J3.m_pin) > 1000 ) ? selectedFunction++ % 3  : J1.function;
@@ -568,7 +575,7 @@ void showJoyCfgScreen()
 			if (p_joystick != &J2)
 				slctr.begin();
 
-			display.drawBox(dash_X, dash_Y + dash_H / 2, dash_W / 2 - s, dash_H / 2);
+			display.drawBox(dash_X, dash_Y + dash_H / 2 + s, dash_W / 2 - s, dash_H / 2 + s);
 			p_joystick = &J2;
 		}
 
@@ -577,7 +584,7 @@ void showJoyCfgScreen()
 			if (p_joystick != &J3)
 				slctr.begin();
 
-			display.drawBox(dash_X + dash_W / 2, dash_Y + dash_H / 2, dash_W / 2 - s, dash_H / 2);
+			display.drawBox(dash_X + dash_W / 2, dash_Y + dash_H / 2 + s, dash_W / 2 - s, dash_H / 2 + s);
 			p_joystick = &J3;
 		}
 
@@ -586,87 +593,19 @@ void showJoyCfgScreen()
 			if (p_joystick != &J4)
 				slctr.begin();
 
-			display.drawBox(dash_X + dash_W / 2, dash_Y, dash_W / 2 - s, dash_H / 2);
+			display.drawBox(dash_X + dash_W / 2, dash_Y, dash_W / 2 - s, dash_H / 2 + s);
 			p_joystick = &J4;
 		}
 
-		if ( p_joystick->read() > 20 )
+		if (p_joystick->read() > 20 || p_joystick->read() < -20)
 		{
-			j_val = p_joystick->trim( slctr.val() * 5 );
-	
-			p_joystick->limits[Joystick::LMAX] = max(p_joystick->limits[Joystick::LMAX], j_val);
-		}
-		else if ( p_joystick->read() < -20 )
-		{
-			j_val = p_joystick->trim( slctr.val() * 5 );
-		
-			p_joystick->limits[Joystick::LMIN] = min(p_joystick->limits[Joystick::LMIN], j_val);
+			j_val = p_joystick->trim(slctr.val() * 5);
 		}
 		else
 		{
 			slctr.begin();
 		}
-		/*
-		if (1 == joystick % 4)
-		{
-			display.drawBox(dash_X, dash_Y + dash_H / 2, dash_W / 2 - s, dash_H / 2);
 
-			if (j_val >= J2.zero + 30)
-			{
-				unsigned char x_t = trimJ_PLUS(J2.zero, j_val, J2.sens[Joystick::RIGHT], h / 2);
-
-				J2.limits[Joystick::LMAX] = max(J2.limits[Joystick::LMAX], j_val);
-			}
-			else if (j_val < J2.zero - 30)
-			{
-				unsigned char x_t = trimJ_MINUS(J2.zero, j_val, J2.sens[Joystick::LEFT], h / 2);
-
-				J2.limits[Joystick::LMIN] = min(J2.limits[Joystick::LMIN], j_val);
-			}
-
-			// J2.function = (analogRead(J3.m_pin) > 1000 ) ? selectedFunction++ % 3 : J2.function;
-		}
-
-		if (2 == joystick % 4)
-		{
-			display.drawBox(dash_X + dash_W / 2, dash_Y + dash_H / 2, dash_W / 2 - s, dash_H / 2);
-
-			if (j_val >= J3.zero + 30)
-			{
-				unsigned char x_t = trimJ_PLUS(J3.zero, j_val, J3.sens[Joystick::RIGHT], h / 2);
-
-				J3.limits[Joystick::LMAX] = max(J3.limits[Joystick::LMAX], j_val);
-			}
-			else if (j_val < J3.zero - 30)
-			{
-				unsigned char x_t = trimJ_MINUS(J3.zero, j_val, J3.sens[Joystick::LEFT], h / 2);
-
-				J3.limits[Joystick::LMIN] = min(J3.limits[Joystick::LMIN], j_val);
-			}
-
-			//   J3.function = ( analogRead(J3.m_pin) > 1000 ) ? selectedFunction++ % 3 : J3.function;
-		}
-
-		if (3 == joystick % 4)
-		{
-			display.drawBox(dash_X + dash_W / 2, dash_Y, dash_W / 2 - s, dash_H / 2);
-
-			if (j_val >= J4.zero + 30)
-			{
-				unsigned char y_t = trimJ_PLUS(J4.zero, j_val, J4.sens[Joystick::UP], h / 2);
-
-				J4.limits[Joystick::LMAX] = max(J4.limits[Joystick::LMAX], j_val);
-			}
-			else if (j_val - J4.zero - 30)
-			{
-				unsigned char y_t = trimJ_MINUS(J4.zero, j_val, J4.sens[Joystick::DOWN], h / 2);
-
-				J4.limits[Joystick::LMIN] = min(J4.limits[Joystick::LMIN], j_val);
-			}
-
-			//  J4.function = ( analogRead(J3.m_pin) > 1000 ) ? selectedFunction++ % 3  : J4.function;
-		}
-		*/
 		button.run();
 
 		display.setFont(BIG_FONT);
@@ -681,18 +620,18 @@ void showJoyCfgScreen()
 
 		unsigned char strSize = display.getStrWidth("XX");
 		display.setFont(SMALL_FONT);
-		
-		display.drawStr(dash_X + strSize + s, dash_Y + 2 * display.getMaxCharHeight() - 2, itoa( J1.limits[Joystick::LMAX],buff_4 ,10));
-		display.drawStr(dash_X + strSize + s, dash_Y + 3 * display.getMaxCharHeight(), itoa( J1.limits[Joystick::LMIN],buff_4,-10 ));
 
-		display.drawStr(dash_X + strSize + s, dash_Y + 2 * display.getMaxCharHeight() - 2 + dash_H / 2, itoa( J2.limits[Joystick::LMAX],buff_4,10));
-		display.drawStr(dash_X + strSize + s, dash_Y + 3 * display.getMaxCharHeight() + dash_H / 2, itoa( J2.limits[Joystick::LMIN],buff_4,-10));
+		display.drawStr(dash_X + strSize + s, dash_Y + 2 * display.getMaxCharHeight() - 2, itoa(J1.read(), buff_4, 10));
+		//		display.drawStr(dash_X + strSize + s, dash_Y + 3 * display.getMaxCharHeight(), itoa( J1.limits[Joystick::LMIN],buff_4,10 ));
 
-		display.drawStr(dash_X - strSize + dash_W - 5 * display.getMaxCharWidth(), dash_Y + 2 * display.getMaxCharHeight() - 2 + dash_H / 2, itoa( J3.limits[Joystick::LMAX], buff_4,10 ));
-		display.drawStr(dash_X - strSize + dash_W - 5 * display.getMaxCharWidth(), dash_Y + 3 * display.getMaxCharHeight() + dash_H / 2, itoa( J3.limits[Joystick::LMIN], buff_4,-10 ));
+		display.drawStr(dash_X + strSize + s, dash_Y + 2 * display.getMaxCharHeight() - 2 + dash_H / 2, itoa(J2.read(), buff_4, 10));
+		//	display.drawStr(dash_X + strSize + s, dash_Y + 3 * display.getMaxCharHeight() + dash_H / 2, itoa( J2.limits[Joystick::LMIN],buff_4,10));
 
-		display.drawStr(dash_X - strSize + dash_W - 5 * display.getMaxCharWidth(), dash_Y + 2 * display.getMaxCharHeight() - 2, itoa( J4.limits[Joystick::LMAX], buff_4 ,10));
-		display.drawStr(dash_X - strSize + dash_W - 5 * display.getMaxCharWidth(), dash_Y + 3 * display.getMaxCharHeight(), itoa( J4.limits[Joystick::LMIN], buff_4 ,-10));
+		display.drawStr(dash_X - strSize + dash_W - 5 * display.getMaxCharWidth(), dash_Y + 2 * display.getMaxCharHeight() - 2 + dash_H / 2, itoa(J3.read(), buff_4, 10));
+		//display.drawStr(dash_X - strSize + dash_W - 5 * display.getMaxCharWidth(), dash_Y + 3 * display.getMaxCharHeight() + dash_H / 2, itoa( J3.limits[Joystick::LMIN], buff_4,10 ));
+
+		display.drawStr(dash_X - strSize + dash_W - 5 * display.getMaxCharWidth(), dash_Y + 2 * display.getMaxCharHeight() - 2, itoa(J4.read(), buff_4, 10));
+		//display.drawStr(dash_X - strSize + dash_W - 5 * display.getMaxCharWidth(), dash_Y + 3 * display.getMaxCharHeight(), itoa( J4.limits[Joystick::LMIN], buff_4 ,10));
 
 		/*
 		   drawType(dash_X, dash_Y + dash_H / 2 - s  , J1.function );
@@ -733,32 +672,32 @@ void showSaveScreen(void(*i_yes_action)(), void(*i_no_action)())
 	ScopedGuard guard = makeScopedGuard([]() { interuptB1 = 0; exit = false; });
 
 	short x = 0, y = 0, y0 = 0, space = 10;
-	
+
 	do
 	{
 		DISPLAY
 		(
 			save_button.run();
-			y0 = drawTitle("SAVE");
+		y0 = drawTitle("SAVE");
 
-			display.setFont(BIG_FONT);
-			display.setFontMode(0);
-			display.setDrawColor(1);
-			display.drawStr(D_WIDTH / 2 - display.getStrWidth(yes) - space, (D_HIGHT - y0) / 2 + display.getMaxCharHeight(), yes);
-			display.drawStr(D_WIDTH / 2 + space + display.getMaxCharWidth(), (D_HIGHT - y0) / 2 + display.getMaxCharHeight(), no);
+		display.setFont(BIG_FONT);
+		display.setFontMode(0);
+		display.setDrawColor(1);
+		display.drawStr(D_WIDTH / 2 - display.getStrWidth(yes) - space, (D_HIGHT - y0) / 2 + display.getMaxCharHeight(), yes);
+		display.drawStr(D_WIDTH / 2 + space + display.getMaxCharWidth(), (D_HIGHT - y0) / 2 + display.getMaxCharHeight(), no);
 
-			y = (D_HIGHT - y0) / 2 - 2;
+		y = (D_HIGHT - y0) / 2 - 2;
 
-			if (slctr.val() % 2)
-			{
-				x = D_WIDTH / 2 - display.getStrWidth(yes) - space - 3;
-				display.drawFrame(x, y, display.getStrWidth(yes) + 6, display.getMaxCharHeight() + 3);
-			}
-			else
-			{
-				x = D_WIDTH / 2 + space + display.getMaxCharWidth() - 3;
-				display.drawFrame(x, y, display.getStrWidth(no) + 6, display.getMaxCharHeight() + 3);
-			}
+		if (slctr.val() % 2)
+		{
+			x = D_WIDTH / 2 - display.getStrWidth(yes) - space - 3;
+			display.drawFrame(x, y, display.getStrWidth(yes) + 6, display.getMaxCharHeight() + 3);
+		}
+		else
+		{
+			x = D_WIDTH / 2 + space + display.getMaxCharWidth() - 3;
+			display.drawFrame(x, y, display.getStrWidth(no) + 6, display.getMaxCharHeight() + 3);
+		}
 		)
 	} while (!exit);
 }
@@ -777,7 +716,7 @@ void showMenuScreen()
 	MenuItem menu[] = {
 		MenuItem("SCAN",   []() { scan(); if (radio.getChannel() != CHANNEL) radio.setChannel(CHANNEL); switchMode(MENU_SCREEN); }),
 		MenuItem("THRTL",  []() { showJoyCfgScreen(); switchMode(MENU_SCREEN); }),
-		MenuItem("MODEL",  []() { DISPLAY(drawTitle(__DATE__); ) activityLed.fade(2000); switchMode(MENU_SCREEN); }),
+		MenuItem("RESET",  []() { DISPLAY(drawTitle(__DATE__); );  showSaveScreen([]() { for (int i = 0; i < EEPROM.length(); i++) { EEPROM.write(i, 0); } } , []() { switchMode(MENU_SCREEN); }); }),
 		MenuItem("Back" ,  []() { switchMode(MAIN_SCREEN); })
 	};
 
@@ -792,7 +731,7 @@ void showMenuScreen()
 
 	do
 	{
-		if ( button.run() || selectedMenu != slctr.val() % menu_items_count)
+		if (button.run() || selectedMenu != slctr.val() % menu_items_count)
 		{
 			selectedMenu = slctr.val() % menu_items_count;
 
@@ -802,25 +741,25 @@ void showMenuScreen()
 			(
 				//draw header
 				char y = drawTitle("USER-MENU");
-				y += 3;
-				display.setFont(BIG_FONT/*u8g2_font_8x13_tr*/);
-				display.setDrawColor(2);
-				display.setFontMode(1);//transparent mode
-				for (char i = 0; i < menu_items_count; i++)
+			y += 3;
+			display.setFont(BIG_FONT/*u8g2_font_8x13_tr*/);
+			display.setDrawColor(2);
+			display.setFontMode(1);//transparent mode
+			for (char i = 0; i < menu_items_count; i++)
+			{
+				char x = (i % 2) ? D_HALF_WIDTH + 1 : 0;
+
+				if (i != 0 && 0 == (i % 2))
+					y += display.getMaxCharHeight();
+
+				if (i == selectedMenu)
 				{
-					char x = (i % 2) ? D_HALF_WIDTH + 1 : 0;
-
-					if (i != 0 && 0 == (i % 2))
-						y += display.getMaxCharHeight();
-
-					if (i == selectedMenu)
-					{
-						display.drawFrame(x, y, D_HALF_WIDTH - 1, display.getMaxCharHeight());
-					}
-
-					display.drawStr(x + (D_HALF_WIDTH - display.getStrWidth(menu[i].m_title)) / 2,
-						y + display.getMaxCharHeight(), menu[i].m_title);
+					display.drawFrame(x, y, D_HALF_WIDTH - 1, display.getMaxCharHeight());
 				}
+
+				display.drawStr(x + (D_HALF_WIDTH - display.getStrWidth(menu[i].m_title)) / 2,
+					y + display.getMaxCharHeight(), menu[i].m_title);
+			}
 
 			/* drawCoordinates(
 				 map(analogRead(STEERING_PIN), 300 , 900, 0, D_WIDTH),
@@ -829,7 +768,7 @@ void showMenuScreen()
 			 selectedMenu = -1;*/
 			)
 
-			activityLed.rapid_blynk(100);
+				activityLed.rapid_blynk(100);
 		}
 	} while (mode == MENU_SCREEN);
 }
@@ -878,7 +817,7 @@ void setup()
 
 	radio.openWritingPipe((const uint8_t*)address[0]);   //мы - труба 0, открываем канал для передачи данных
 	radio.setChannel(CHANNEL);  //выбираем канал (в котором нет шумов!)
-	
+
 	radio.enableDynamicPayloads();
 
 	radio.setPALevel(RF24_PA_MAX); //уровень мощности передатчика. На выбор RF24_PA_MIN, RF24_PA_LOW, RF24_PA_HIGH, RF24_PA_MAX
@@ -942,17 +881,13 @@ void setup()
 
 	J4.load(J3.load(J2.load(J1.load(0))));
 
-	J1.zero = analogRead(J1.m_pin);
-	J2.zero = analogRead(J2.m_pin);
-
-	J3.zero = analogRead(J3.m_pin);
-	J4.zero = analogRead(J4.m_pin);
+	J1.reset(); J2.reset(); J3.reset(); J4.reset();
 
 	switchMode(MAIN_SCREEN);
-/*
-	LOG_MSG(F("Zero values are D1 V,H ") << J1.zero << F(",") << J2.zero);
-	LOG_MSG(F("Zero values are D2 V,H ") << J4.zero << F(",") << J3.zero);*/
-	
+	/*
+		LOG_MSG(F("Zero values are D1 V,H ") << J1.zero << F(",") << J2.zero);
+		LOG_MSG(F("Zero values are D2 V,H ") << J4.zero << F(",") << J3.zero);*/
+
 	activityLed.fade(1000);
 }
 
@@ -984,7 +919,7 @@ void loop()
 	data.m_b3 = switch_[2].getState();
 	data.m_b4 = switch_[3].getState();
 
-	data.m_speed	= J1.read();
+	data.m_speed = J1.read();
 	data.m_steering = J3.read();
 
 	data.m_j[2] = J2.read();
@@ -1001,11 +936,7 @@ void loop()
 	transmit_data = data;
 
 	LOG_MSG(F("Speed: ") << transmit_data.m_speed <<
-		F(" Steering: ") << transmit_data.m_steering <<
-		F(" ") << sensSteeringR <<
-		F(" ") << sensSteeringL <<
-		F(" ") << sensSpeedUP <<
-		F(" ") << sensSpeedDOWN);
+		F(" Steering: ") << transmit_data.m_steering);
 
 	lastTransmitionTime = millis();
 
@@ -1034,7 +965,7 @@ ISR(PCINT2_vect) {
 }
 
 ISR(PCINT1_vect) {
-	if (!(PINC & (1 << PC0))) {/* Arduino pin A0 interrupt*/ LOG_MSG(F("A0")); slctr.run(); activityLed.blynk();}
+	if (!(PINC & (1 << PC0))) {/* Arduino pin A0 interrupt*/ LOG_MSG(F("A0")); slctr.run(); activityLed.blynk(); }
 	if (!(PINC & (1 << PC1))) {/* Arduino pin A1 interrupt*/ LOG_MSG(F("A1")); if (interuptB1) interuptB1->run(); }
 	if (!(PINC & (1 << PC2))) {/* Arduino pin A2 interrupt*/ }
 	if (!(PINC & (1 << PC3))) {/* Arduino pin A3 interrupt*/ }
