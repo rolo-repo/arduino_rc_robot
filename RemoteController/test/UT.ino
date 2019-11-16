@@ -148,24 +148,43 @@ test(compare_not_equal)
 	
 	assertEqual(data1 == data2, false);
 }
-
-
 test(save_and_load)
 {
-	using namespace arduino::utils;
+	unsigned char memory[128];
+	short index = 0;	
 
-	Joystick j;
 
-	j.zero = 5;
-	j.save(0);
+	unsigned short zero = 500;
+	unsigned short sens[2] = { 100 , 28 };
+	bool m_switched = true;
 
-	Joystick j1;
+	//save
+	memory[index++] = 0b11001100;
 
-	j1.load(0);
+	const unsigned char *t = (const unsigned char*)sens;
 
-	assertEqual( j1.zero, 5 );
+	for (auto i = 0; i < sizeof(sens); i++)
+	{
+		memory[index++] = t[i];
+	}
 
-//	assertEqual( j1 == j , true)
+	memory[index++] = (unsigned char)zero;
+	memory[index++] = (unsigned char)(zero >> 8);
+	memory[index++] = (unsigned char)m_switched;
+
+	unsigned short lastIndex = index;
+//load
+	index = 0;
+	assertEqual(memory[index++], 0b11001100);
+	for (auto i = 0; i < sizeof(sens); i++)
+	{
+	    assertEqual( t[i] ,memory[index++] );
+	}
+
+	assertEqual( zero , memory[index++] | memory[index++] << 8);
+	assertEqual( (short)m_switched ,memory[index++] & 0x1 );
+
+	assertEqual(lastIndex, index);
 }
 
 void setup() {

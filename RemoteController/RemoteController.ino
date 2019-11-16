@@ -65,8 +65,8 @@ constexpr short not_asighned = 2;
 
 #define HEADER_FONT u8g2_font_9x15B_tr
 #define SMALL_FONT u8g2_font_micro_tn
-#define MEDIUM_FONT u8g2_font_6x12_tn
-#define BIG_FONT u8g2_font_10x20_mr
+#define MEDIUM_FONT u8g2_font_6x12_tr
+#define BIG_FONT HEADER_FONT//u8g2_font_10x20_mr
 
 //U8GLIB_SSD1306_128X64 display(U8G_I2C_OPT_NONE | U8G_I2C_OPT_DEV_0);
 //U8GLIB_SH1106_128X64 display(U8G_I2C_OPT_NONE | U8G_I2C_OPT_DEV_0);
@@ -87,23 +87,37 @@ private:
 	//typedef short(Joystick::*adjust)(const long&) const ;
 	using formula = short(Joystick::*)(const long&) const;
 	formula m_formula;
+public:
+	bool m_switched = false;
 
 	PIN m_pin = 0;
 public:
-	Joystick(PIN i_pin) : m_pin(i_pin), function(not_asighned), m_formula(&(this->parabola127)) {}
+	Joystick(PIN i_pin) : m_pin(i_pin), function(not_asighned), m_formula(&parabola127) {}
 
-	short read()
+	short read() const
 	{
 		short value = analogRead(m_pin);
 
 		if (abs(value - zero) < 10)
-			return zero;
-
-		return constrain((this->*m_formula)((value >= zero)
-			? map(value, zero, 1023 - sens[UP], 0, MAX)
-			: map(value, 0 + sens[DOWN], zero, MIN, 0)
-			)
-			, MIN, MAX);
+			return 0;
+		
+		if ( !m_switched )
+		{
+			return constrain((this->*m_formula)((value >= zero)
+				? map(value, zero, 1023 - sens[UP], 0, MAX)
+				: map(value, 0 + sens[DOWN], zero, MIN, 0)
+				)
+				, MIN, MAX);
+		}
+		else
+		{
+			return constrain((this->*m_formula)((value >= zero)
+				? map( value, zero, 1023 - sens[UP], 0, MIN )
+				: map( value, 0 + sens[DOWN], zero, MAX, 0 )
+				)
+				, MIN, MAX);
+		}
+		
 	}
 private:
 	short linear(const long& i_value) const
@@ -113,7 +127,7 @@ private:
 
 	short parabola127(const long& i_value) const
 	{
-		return (short)(float(i_value * i_value) / float(127));
+		return (short)(float(i_value * i_value) * ( ( i_value > 0 ) - ( i_value < 0) ) / float(127));
 	}
 
 public:
@@ -125,13 +139,14 @@ public:
 
 		const unsigned char *t = (const unsigned char*)sens;
 
-		for (auto i = 0; i < 2 * sizeof(sens); i++)
+		for (auto i = 0; i < sizeof(sens); i++)
 		{
 			EEPROM.update(index++, t[i]);
 		}
 
 		EEPROM.update(index++, (unsigned char)zero);
 		EEPROM.update(index++, (unsigned char)(zero >> 8));
+		EEPROM.update(index++, (unsigned char)m_switched);
 
 		return index;
 	}
@@ -140,18 +155,18 @@ public:
 	{
 		unsigned short index = i_idx;
 
-		if (0b11001100 == EEPROM.read(index))
+		if (0b11001100 == EEPROM.read(index++))
 		{
 			unsigned char *t = (unsigned char*)sens;
-
-			for (auto i = 0; i < 2 * sizeof(sens); i++)
+			
+			for (auto i = 0; i < sizeof(sens); i++)
 			{
 				t[i] = EEPROM.read(index++);
 			}
 
+			zero = EEPROM.read(index++) | EEPROM.read(index++) << 8;
 
-			zero = EEPROM.read(index++);
-			zero |= EEPROM.read(index++) << 8;
+			m_switched = EEPROM.read(index++) & 0x1;
 		}
 
 		return index;
@@ -214,6 +229,15 @@ public:
 		}
 	}
 
+	void drawD(short i_x0, short i_y0, short i_maxW, short i_maxH) const
+	{
+		/*
+		 _______
+		 | -127 |
+		    <>  |
+		*/
+	}
+
 	short trim(unsigned short i_trimValue)
 	{
 		if (read() > 0)
@@ -239,6 +263,15 @@ public:
 		zero = t_zero;
 	}
 
+	void switchDirection()
+	{
+		m_switched = ~m_switched;
+	}
+
+	bool isSwitched()
+	{
+		return m_switched;
+	}
 };
 
 Joystick joysticks[] = { Joystick(J1_PIN) , Joystick(J2_PIN) ,Joystick(J3_PIN) ,Joystick(J4_PIN) };
@@ -435,7 +468,7 @@ void drawSwitches()
 		display.setFontMode(1);//transparent mode
 		display.setFont(MEDIUM_FONT);
 		display.setFontPosCenter();
-		display.drawStr((w - display.getMaxCharWidth()) / 2 + x + 1 /*border size 1 pixel */, 2 + y + h >> 1, itoa((i + 1), buff_4, 10));
+		display.drawStr((w - display.getMaxCharWidth()) / 2 + x + 1 /*border size 1 pixel */, y + h - display.getMaxCharHeight() / 2 , itoa((i + 1), buff_4, 10));
 		x += (w + s);
 	}
 }
@@ -456,7 +489,7 @@ void drawChannelNumber()
 		s = display.getMaxCharWidth() * 2;
 	}
 
-	display.drawStr(D_WIDTH - 2 - s, D_HIGHT - 2, itoa(CHANNEL, buff_4, 10));
+	display.drawStr(D_WIDTH - 2 - s, D_HIGHT, itoa(CHANNEL, buff_4, 10));
 
 }
 void drawBatteryLevel()
@@ -495,9 +528,9 @@ void showMainScreen()
 	(
 		//  display.drawFrame(1, 1, D_WIDTH, D_HIGHT);
 		drawSwitches();
-	drawBatteryLevel();
-	drawChannelNumber();
-	drawTelemetry();
+		drawBatteryLevel();
+		drawChannelNumber();
+		drawTelemetry();
 	)
 }
 
@@ -514,13 +547,36 @@ void drawType(const short &x, const short &y, short i_function)
 	display.drawStr(x, y, str);
 }
 */
-void showJoyCfgScreen()
+
+
+void joystickTrim ( void * i_pValue )
+{
+	Joystick *p_joystick = static_cast<Joystick*>(i_pValue);
+
+	if (p_joystick->read() > 20 || p_joystick->read() < -20)
+	{
+		p_joystick->trim( slctr.val() * 5);
+	}
+	else
+	{
+		slctr.begin();
+	}
+}
+
+void joystickSwitchDirection(void * i_pValue)
+{
+	Joystick *p_joystick = static_cast<Joystick*>(i_pValue);
+
+	if ( slctr.val() % 5 ) 
+		p_joystick->switchDirection();
+}
+
+void showJoyCfgScreen( const char* i_title , void (*action)(void*) )
 {
 	const char w = 12;
 	const char b = 1;
 	const char s = 2;
 
-	short j_val = 0;
 	Joystick *p_joystick = 0;
 
 	static short joystick = 0;
@@ -528,7 +584,7 @@ void showJoyCfgScreen()
 	Button_t button(B1_PIN, []() { joystick++; },
 		[]() { joystick++; },
 		[]() { showSaveScreen([]() { J4.save(J3.save(J2.save(J1.save(0)))); switchMode(LAST); },
-			[]() { switchMode(LAST); }); }
+		[]() { switchMode(LAST); }); }
 	);
 
 	slctr.begin();
@@ -538,9 +594,9 @@ void showJoyCfgScreen()
 
 		DISPLAY
 		(
-			display.setDrawColor(1);//white color
+		display.setDrawColor(1);//white color
 
-		unsigned char y = drawTitle("CONF.JOY") + 1;
+		unsigned char y = drawTitle(i_title) + 1;// drawTitle("CONF.JOY") + 1;
 
 		unsigned char h = D_HIGHT - (y + s); // y - vertical == 48
 
@@ -597,14 +653,8 @@ void showJoyCfgScreen()
 			p_joystick = &J4;
 		}
 
-		if (p_joystick->read() > 20 || p_joystick->read() < -20)
-		{
-			j_val = p_joystick->trim(slctr.val() * 5);
-		}
-		else
-		{
-			slctr.begin();
-		}
+
+		action((void*)p_joystick);
 
 		button.run();
 
@@ -621,17 +671,19 @@ void showJoyCfgScreen()
 		unsigned char strSize = display.getStrWidth("XX");
 		display.setFont(SMALL_FONT);
 
-		display.drawStr(dash_X + strSize + s, dash_Y + 2 * display.getMaxCharHeight() - 2, itoa(J1.read(), buff_4, 10));
-		//		display.drawStr(dash_X + strSize + s, dash_Y + 3 * display.getMaxCharHeight(), itoa( J1.limits[Joystick::LMIN],buff_4,10 ));
+		const char* plus = "+";
+		const char* minus = "-";
+		display.drawStr(dash_X + strSize + s, dash_Y + 2 * display.getMaxCharHeight() - 3, itoa(J1.read(), buff_4, 10));
+		display.drawStr(dash_X + strSize + s, dash_Y + 2 * display.getMaxCharHeight(), ( J1.isSwitched() ) ? minus  : plus);
 
-		display.drawStr(dash_X + strSize + s, dash_Y + 2 * display.getMaxCharHeight() - 2 + dash_H / 2, itoa(J2.read(), buff_4, 10));
-		//	display.drawStr(dash_X + strSize + s, dash_Y + 3 * display.getMaxCharHeight() + dash_H / 2, itoa( J2.limits[Joystick::LMIN],buff_4,10));
+		display.drawStr(dash_X + strSize + s, dash_Y + 2 * display.getMaxCharHeight() - 3 + dash_H / 2, itoa(J2.read(), buff_4, 10));
+		display.drawStr(dash_X + strSize + s, dash_Y + 2 * display.getMaxCharHeight() + dash_H / 2, ( J2.isSwitched() ) ? minus : plus);
 
-		display.drawStr(dash_X - strSize + dash_W - 5 * display.getMaxCharWidth(), dash_Y + 2 * display.getMaxCharHeight() - 2 + dash_H / 2, itoa(J3.read(), buff_4, 10));
-		//display.drawStr(dash_X - strSize + dash_W - 5 * display.getMaxCharWidth(), dash_Y + 3 * display.getMaxCharHeight() + dash_H / 2, itoa( J3.limits[Joystick::LMIN], buff_4,10 ));
+		display.drawStr(dash_X - strSize + dash_W - 5 * display.getMaxCharWidth(), dash_Y + 2 * display.getMaxCharHeight() - 3 + dash_H / 2, itoa(J3.read(), buff_4, 10));
+		display.drawStr(dash_X - strSize + dash_W - 5 * display.getMaxCharWidth(), dash_Y + 3 * display.getMaxCharHeight() + dash_H / 2, ( J3.isSwitched() ) ? minus : plus);
 
-		display.drawStr(dash_X - strSize + dash_W - 5 * display.getMaxCharWidth(), dash_Y + 2 * display.getMaxCharHeight() - 2, itoa(J4.read(), buff_4, 10));
-		//display.drawStr(dash_X - strSize + dash_W - 5 * display.getMaxCharWidth(), dash_Y + 3 * display.getMaxCharHeight(), itoa( J4.limits[Joystick::LMIN], buff_4 ,10));
+		display.drawStr(dash_X - strSize + dash_W - 5 * display.getMaxCharWidth(), dash_Y + 2 * display.getMaxCharHeight() - 3, itoa(J4.read(), buff_4, 10));
+		display.drawStr(dash_X - strSize + dash_W - 5 * display.getMaxCharWidth(), dash_Y + 3 * display.getMaxCharHeight(), ( J4.isSwitched() ) ? minus : plus);
 
 		/*
 		   drawType(dash_X, dash_Y + dash_H / 2 - s  , J1.function );
@@ -715,8 +767,9 @@ void showMenuScreen()
 
 	MenuItem menu[] = {
 		MenuItem("SCAN",   []() { scan(); if (radio.getChannel() != CHANNEL) radio.setChannel(CHANNEL); switchMode(MENU_SCREEN); }),
-		MenuItem("THRTL",  []() { showJoyCfgScreen(); switchMode(MENU_SCREEN); }),
-		MenuItem("RESET",  []() { DISPLAY(drawTitle(__DATE__); );  showSaveScreen([]() { for (int i = 0; i < EEPROM.length(); i++) { EEPROM.write(i, 0); } } , []() { switchMode(MENU_SCREEN); }); }),
+		MenuItem("THRTL",  []() { showJoyCfgScreen( "JOY-TRM" , &joystickTrim ); switchMode(MENU_SCREEN); }),
+		MenuItem("DIREC",  []() { showJoyCfgScreen("JOY-DIR" , &joystickSwitchDirection); switchMode(MENU_SCREEN); }),
+		MenuItem("RESET",  []() { DISPLAY(drawTitle(__DATE__); );  showSaveScreen([]() { for (short i = 0; i < EEPROM.length(); i++) { EEPROM.write(i, 0); } } , []() { switchMode(MENU_SCREEN); }); }),
 		MenuItem("Back" ,  []() { switchMode(MAIN_SCREEN); })
 	};
 
@@ -741,25 +794,25 @@ void showMenuScreen()
 			(
 				//draw header
 				char y = drawTitle("USER-MENU");
-			y += 3;
-			display.setFont(BIG_FONT/*u8g2_font_8x13_tr*/);
-			display.setDrawColor(2);
-			display.setFontMode(1);//transparent mode
-			for (char i = 0; i < menu_items_count; i++)
-			{
-				char x = (i % 2) ? D_HALF_WIDTH + 1 : 0;
-
-				if (i != 0 && 0 == (i % 2))
-					y += display.getMaxCharHeight();
-
-				if (i == selectedMenu)
+				y += 3;
+				display.setFont(MEDIUM_FONT/*u8g2_font_8x13_tr*/);
+				display.setDrawColor(2);
+				display.setFontMode(1);//transparent mode
+				for (char i = 0; i < menu_items_count; i++)
 				{
-					display.drawFrame(x, y, D_HALF_WIDTH - 1, display.getMaxCharHeight());
-				}
+					char x = (i % 2) ? D_HALF_WIDTH + 1 : 0;
 
-				display.drawStr(x + (D_HALF_WIDTH - display.getStrWidth(menu[i].m_title)) / 2,
-					y + display.getMaxCharHeight(), menu[i].m_title);
-			}
+					if (i != 0 && 0 == (i % 2))
+						y += display.getMaxCharHeight();
+
+					if (i == selectedMenu)
+					{
+						display.drawFrame(x, y, D_HALF_WIDTH - 1, display.getMaxCharHeight());
+					}
+
+					display.drawStr(x + (D_HALF_WIDTH - display.getStrWidth(menu[i].m_title)) / 2,
+						y + display.getMaxCharHeight(), menu[i].m_title);
+				}
 
 			/* drawCoordinates(
 				 map(analogRead(STEERING_PIN), 300 , 900, 0, D_WIDTH),
@@ -768,7 +821,7 @@ void showMenuScreen()
 			 selectedMenu = -1;*/
 			)
 
-				activityLed.rapid_blynk(100);
+			activityLed.rapid_blynk(100);
 		}
 	} while (mode == MENU_SCREEN);
 }
