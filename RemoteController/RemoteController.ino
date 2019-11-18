@@ -73,8 +73,6 @@ constexpr short not_asighned = 2;
 U8G2_SH1106_128X64_NONAME_2_HW_I2C display(U8G2_R0, /* reset=*/ OLED_RESET);
 #define DISPLAY(...) display.firstPage(); do { __VA_ARGS__ ;} while( display.nextPage() );
 
-
-
 struct Joystick
 {
 	enum Side { UP = 0, DOWN = 1, RIGHT = 0, LEFT = 1 };
@@ -89,7 +87,6 @@ private:
 	formula m_formula;
 public:
 	bool m_switched = false;
-
 	PIN m_pin = 0;
 public:
 	Joystick(PIN i_pin) : m_pin(i_pin), function(not_asighned), m_formula(&parabola127) {}
@@ -131,7 +128,7 @@ private:
 	}
 
 public:
-	unsigned short save(unsigned short i_idx)
+	unsigned short save(unsigned short i_idx = 0)
 	{
 		unsigned short index = i_idx;
 
@@ -151,7 +148,7 @@ public:
 		return index;
 	}
 
-	unsigned short load(unsigned short i_idx)
+	unsigned short load(unsigned short i_idx = 0)
 	{
 		unsigned short index = i_idx;
 
@@ -172,7 +169,7 @@ public:
 		return index;
 	}
 
-	void draw(short i_x0, short i_y0, short i_maxW, short i_maxH) const
+	void drawBar( short i_x0, short i_y0, short i_maxW, short i_maxH) const
 	{
 		short value = this->read();
 
@@ -229,13 +226,41 @@ public:
 		}
 	}
 
-	void drawD(short i_x0, short i_y0, short i_maxW, short i_maxH) const
+	void drawDetails( const char* i_name , short i_x0, short i_y0, short i_maxW, short i_maxH) const
 	{
+		short h = i_maxH;
+		short w = i_maxW;
+		short x = i_x0;
+		short y = i_y0;
+		short s = 2;
+
+
+		display.setFont(BIG_FONT);
+		display.setFontMode(1);//transparent mode
+		display.setDrawColor(2);
+		display.setFontPosBaseline();
+
+		unsigned char nameSize = display.drawStr( x + s, y + display.getMaxCharHeight(), i_name );
+
+		x += nameSize + s;
+		w -= nameSize + s;
+
 		/*
 		 _______
 		 | -127 |
 		    <>  |
 		*/
+
+		static constexpr char* plus = "+";
+		static constexpr char* minus = "-";
+
+	    display.drawFrame(x, y, w, h);
+		display.setDrawColor(2);
+		display.setFontMode(1);//transparent mode
+		display.setFont(SMALL_FONT);
+		display.setFontPosCenter();
+		display.drawStr( x + w / 2 - 2 * display.getMaxCharWidth(), y + h / 4 , itoa((this->read()), buff_4, 10));
+		display.drawStr( x + w / 2, y + 3/4 * y , ( m_switched ) ? plus : minus );
 	}
 
 	short trim(unsigned short i_trimValue)
@@ -295,14 +320,13 @@ PIN  STEERING_PIN = J2_H_PIN;
 #define D_WIDTH 127
 #define D_HALF_WIDTH D_WIDTH / 2
 #define D_HALF_HIGHT D_HIGHT / 2
-
+/////////////////////////////////////////////////////////////////////////
 volatile Button_t *interuptB1 = 0;
 volatile Button_t *interuptB2 = 0;
 
 unsigned char CHANNEL = 0x64;
 
 unsigned char address[][6] = { "1Node" };
-
 
 enum Mode {
 	MAIN_SCREEN = 1,
@@ -360,8 +384,6 @@ Button_t  main_button(B1_PIN, []() { DISPLAY(display.drawBox(0, 0, D_WIDTH, D_HI
 	[]() { switchMode(static_cast<Mode>(static_cast<int>(mode) >> 1)); },
 	[]() { switchMode(static_cast<Mode>(static_cast<int>(mode) << 1)); });
 
-
-
 volatile InteruptEncoder_t  slctr(ENC_PIN1, ENC_PIN2);
 
 unsigned char scan()
@@ -415,6 +437,7 @@ unsigned char scan()
 			[channelStr](unsigned char hight)
 			{
 				display.setFont(SMALL_FONT/*u8g2_font_5x7_tn */);
+				display.setFontPosBaseline();
 				display.setDrawColor(1);//white color
 
 				(the_channel > D_HALF_WIDTH) ?
@@ -426,11 +449,11 @@ unsigned char scan()
 			)//DISPLAY
 
 			// Did we get a carrier?
-				if (radio.testCarrier())
-				{
-					activityLed.blynk();
-					++values[channel];
-				}
+			if (radio.testCarrier())
+			{
+				activityLed.blynk();
+				++values[channel];
+			}
 
 			radio.stopListening(); //it is transmitter stop listening at the end    
 		}
@@ -441,7 +464,7 @@ unsigned char scan()
 
 /*
 void drawCoordinates( short x, short y )
-{
+{do not remove me 
 //    display.setFont(u8g2_font_5x7_tn);
 	(y > D_HIGHT * 3/4 ) ? display.drawStr(D_WIDTH - 30 , y - 1, String(y).c_str()) : display.drawStr(D_WIDTH - 30, y + 8, String(y).c_str());
 	display.drawHLine(0, y, D_WIDTH - 1);
@@ -518,7 +541,7 @@ void drawTelemetry()
 
 	for (char i = 0; i < 4; i++)
 	{
-		joysticks[i].draw(x0 + i * (bar_w + 1), y0, bar_w, t_h);
+		joysticks[i].drawBar(x0 + i * (bar_w + 1), y0, bar_w, t_h);
 	}
 
 }
@@ -567,7 +590,7 @@ void joystickSwitchDirection(void * i_pValue)
 {
 	Joystick *p_joystick = static_cast<Joystick*>(i_pValue);
 
-	if ( slctr.val() % 5 ) 
+	if ( slctr.val() % 2 ) 
 		p_joystick->switchDirection();
 }
 
@@ -583,7 +606,7 @@ void showJoyCfgScreen( const char* i_title , void (*action)(void*) )
 
 	Button_t button(B1_PIN, []() { joystick++; },
 		[]() { joystick++; },
-		[]() { showSaveScreen([]() { J4.save(J3.save(J2.save(J1.save(0)))); switchMode(LAST); },
+		[]() { showSaveScreen([]() { J4.save(J3.save(J2.save(J1.save()))); switchMode(LAST); },
 		[]() { switchMode(LAST); }); }
 	);
 
@@ -594,26 +617,30 @@ void showJoyCfgScreen( const char* i_title , void (*action)(void*) )
 
 		DISPLAY
 		(
-		display.setDrawColor(1);//white color
-
 		unsigned char y = drawTitle(i_title) + 1;// drawTitle("CONF.JOY") + 1;
 
 		unsigned char h = D_HIGHT - (y + s); // y - vertical == 48
 
 		unsigned char y0 = y + s + h / 2;
 
-		J1.draw(b, y + s, w, h);
-		J4.draw(D_WIDTH - w - b, y + s, w, h);
-		J2.draw(b + w + s, D_HIGHT - w, h, w);//j2
-		J3.draw(D_WIDTH - w - s - b - h, D_HIGHT - w, h, w);//j3
-
-
 		unsigned char dash_X = b + w + s;
 		unsigned char dash_Y = y + s;
 		unsigned char dash_W = D_WIDTH - 2 * w - 2 * s;
 		unsigned char dash_H = D_HIGHT - y - w - 2 * s;
 
-		display.setDrawColor(1);
+		J1.drawBar( b, y + s, w, h );
+		J4.drawBar( D_WIDTH - w - b, y + s, w, h );
+
+		J2.drawBar( b + w + s, D_HIGHT - w, h, w);
+		J3.drawBar( D_WIDTH - w - s - b - h, D_HIGHT - w, h, w);
+
+		J1.drawDetails("J1", dash_X, dash_Y, dash_W / 2 - s, dash_H / 2 - s);
+		J4.drawDetails("J4", dash_W / 2 + s, dash_Y, dash_W / 2 - s, dash_H / 2 - s);
+
+		J2.drawDetails("J2", dash_X, dash_Y + dash_H / 2 + s, dash_W / 2 - s, dash_H / 2 - s);
+		J3.drawDetails("J3", dash_W / 2 + s, dash_Y + dash_H / 2 + s, dash_W / 2 - s, dash_H / 2 - s);
+
+		display.setDrawColor(1);//white color
 
 		if (0 == joystick % 4)
 		{
@@ -652,46 +679,10 @@ void showJoyCfgScreen( const char* i_title , void (*action)(void*) )
 			display.drawBox(dash_X + dash_W / 2, dash_Y, dash_W / 2 - s, dash_H / 2 + s);
 			p_joystick = &J4;
 		}
-
+		)
 
 		action((void*)p_joystick);
-
 		button.run();
-
-		display.setFont(BIG_FONT);
-		display.setFontMode(1);//transparent mode
-		display.setDrawColor(2);
-
-		display.drawStr(dash_X + 1, dash_Y + display.getMaxCharHeight(), "J1");
-		display.drawStr(dash_X + 1, dash_Y + dash_H / 2 + display.getMaxCharHeight(), "J2");
-
-		display.drawStr(dash_X + dash_W - 2 * display.getMaxCharWidth() - s - 1, dash_Y + dash_H / 2 + display.getMaxCharHeight(), "J3");
-		display.drawStr(dash_X + dash_W - 2 * display.getMaxCharWidth() - s - 1, dash_Y + display.getMaxCharHeight(), "J4");
-
-		unsigned char strSize = display.getStrWidth("XX");
-		display.setFont(SMALL_FONT);
-
-		const char* plus = "+";
-		const char* minus = "-";
-		display.drawStr(dash_X + strSize + s, dash_Y + 2 * display.getMaxCharHeight() - 3, itoa(J1.read(), buff_4, 10));
-		display.drawStr(dash_X + strSize + s, dash_Y + 2 * display.getMaxCharHeight(), ( J1.isSwitched() ) ? minus  : plus);
-
-		display.drawStr(dash_X + strSize + s, dash_Y + 2 * display.getMaxCharHeight() - 3 + dash_H / 2, itoa(J2.read(), buff_4, 10));
-		display.drawStr(dash_X + strSize + s, dash_Y + 2 * display.getMaxCharHeight() + dash_H / 2, ( J2.isSwitched() ) ? minus : plus);
-
-		display.drawStr(dash_X - strSize + dash_W - 5 * display.getMaxCharWidth(), dash_Y + 2 * display.getMaxCharHeight() - 3 + dash_H / 2, itoa(J3.read(), buff_4, 10));
-		display.drawStr(dash_X - strSize + dash_W - 5 * display.getMaxCharWidth(), dash_Y + 3 * display.getMaxCharHeight() + dash_H / 2, ( J3.isSwitched() ) ? minus : plus);
-
-		display.drawStr(dash_X - strSize + dash_W - 5 * display.getMaxCharWidth(), dash_Y + 2 * display.getMaxCharHeight() - 3, itoa(J4.read(), buff_4, 10));
-		display.drawStr(dash_X - strSize + dash_W - 5 * display.getMaxCharWidth(), dash_Y + 3 * display.getMaxCharHeight(), ( J4.isSwitched() ) ? minus : plus);
-
-		/*
-		   drawType(dash_X, dash_Y + dash_H / 2 - s  , J1.function );
-		   drawType(dash_X, dash_Y + dash_H  - s , J2.function);
-		   drawType(dash_X + dash_W / 2 + s , dash_Y + dash_H - s , J3.function);
-		   drawType(dash_X + dash_W / 2, dash_Y + dash_H / 2 - s , J4.function);
-		*/
-		)
 	} while (mode != LAST);
 }
 
@@ -700,6 +691,8 @@ short drawTitle(const char* i_title)
 	display.setFont(HEADER_FONT);
 	display.setFontMode(0);
 	display.setDrawColor(1);
+	display.setFontPosBottom();
+
 	display.drawStr((D_WIDTH - display.getStrWidth(i_title)) / 2, display.getMaxCharHeight() + D_ZERO_Y, i_title);
 	display.drawHLine(0, D_ZERO_Y + display.getAscent() + 3, D_WIDTH);
 
@@ -932,7 +925,7 @@ void setup()
 
 	attachInterrupt(digitalPinToInterrupt(ENC_PIN1), []() {	slctr.run(); activityLed.blynk(); }, CHANGE);
 
-	J4.load(J3.load(J2.load(J1.load(0))));
+	J4.load(J3.load(J2.load(J1.load())));
 
 	J1.reset(); J2.reset(); J3.reset(); J4.reset();
 
