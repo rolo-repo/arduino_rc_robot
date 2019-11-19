@@ -85,7 +85,7 @@ private:
 	//typedef short(Joystick::*adjust)(const long&) const ;
 	using formula = short(Joystick::*)(const long&) const;
 	formula m_formula;
-public:
+//public:
 	bool m_switched = false;
 	PIN m_pin = 0;
 public:
@@ -98,7 +98,7 @@ public:
 		if (abs(value - zero) < 10)
 			return 0;
 		
-		if ( !m_switched )
+		if ( !isSwitched() )
 		{
 			return constrain((this->*m_formula)((value >= zero)
 				? map(value, zero, 1023 - sens[UP], 0, MAX)
@@ -226,7 +226,7 @@ public:
 		}
 	}
 
-	void drawDetails( const char* i_name , short i_x0, short i_y0, short i_maxW, short i_maxH) const
+	void drawDetails( const char* i_name , short i_x0, short i_y0, short i_maxW, short i_maxH, bool i_flip = false) const
 	{
 		short h = i_maxH;
 		short w = i_maxW;
@@ -238,13 +238,21 @@ public:
 		display.setFont(BIG_FONT);
 		display.setFontMode(1);//transparent mode
 		display.setDrawColor(2);
-		display.setFontPosBaseline();
+		display.setFontPosCenter();
+		if ( x - i_maxW  < 0)
+		{
+			unsigned char nameSize = display.drawStr(x + s, y + h/2 + s, i_name);
 
-		unsigned char nameSize = display.drawStr( x + s, y + display.getMaxCharHeight(), i_name );
+			x += nameSize + s;
+			w -= nameSize + s;
+		}
+		else
+		{
+			unsigned char nameSize = display.drawStr( x + w - display.getStrWidth(i_name) - s, y + h/2 + s, i_name);
 
-		x += nameSize + s;
-		w -= nameSize + s;
-
+			w -= ( nameSize + s ) ;
+		}
+		
 		/*
 		 _______
 		 | -127 |
@@ -258,9 +266,9 @@ public:
 		display.setDrawColor(2);
 		display.setFontMode(1);//transparent mode
 		display.setFont(SMALL_FONT);
-		display.setFontPosCenter();
-		display.drawStr( x + w / 2 - 2 * display.getMaxCharWidth(), y + h / 4 , itoa((this->read()), buff_4, 10));
-		display.drawStr( x + w / 2, y + 3/4 * y , ( m_switched ) ? plus : minus );
+		display.setFontPosBaseline();
+		display.drawStr( x + w / 2 - 2 * display.getMaxCharWidth(), y + s + display.getMaxCharHeight() , itoa((this->read()), buff_4, 10));
+		display.drawStr( x + w / 2, y + h - s  , ( this->isSwitched() ) ? plus : minus );
 	}
 
 	short trim(unsigned short i_trimValue)
@@ -290,10 +298,10 @@ public:
 
 	void switchDirection()
 	{
-		m_switched = ~m_switched;
+		m_switched = !m_switched;
 	}
 
-	bool isSwitched()
+	bool isSwitched() const
 	{
 		return m_switched;
 	}
@@ -634,20 +642,21 @@ void showJoyCfgScreen( const char* i_title , void (*action)(void*) )
 		J2.drawBar( b + w + s, D_HIGHT - w, h, w);
 		J3.drawBar( D_WIDTH - w - s - b - h, D_HIGHT - w, h, w);
 
-		J1.drawDetails("J1", dash_X, dash_Y, dash_W / 2 - s, dash_H / 2 - s);
-		J4.drawDetails("J4", dash_W / 2 + s, dash_Y, dash_W / 2 - s, dash_H / 2 - s);
+		J1.drawDetails("J1", dash_X, dash_Y, dash_W / 2 - s, dash_H / 2);
+		J4.drawDetails("J4", dash_X + dash_W/2 , dash_Y, dash_W / 2 - s , dash_H / 2 ,true);
 
-		J2.drawDetails("J2", dash_X, dash_Y + dash_H / 2 + s, dash_W / 2 - s, dash_H / 2 - s);
-		J3.drawDetails("J3", dash_W / 2 + s, dash_Y + dash_H / 2 + s, dash_W / 2 - s, dash_H / 2 - s);
+		J2.drawDetails("J2", dash_X, dash_Y + dash_H / 2 + s, dash_W / 2 - s, dash_H / 2 );
+		J3.drawDetails("J3", dash_X +  dash_W/2 ,dash_Y + dash_H / 2 + s, dash_W / 2 - s, dash_H / 2 ,true);
 
-		display.setDrawColor(1);//white color
+		//display.setDrawColor(1);//white color
+		display.setDrawColor(2); // white overlapping
 
 		if (0 == joystick % 4)
 		{
 			if (p_joystick != &J1)
 				slctr.begin();
 
-			display.drawBox(dash_X, dash_Y, dash_W / 2 - s, dash_H / 2 + s);
+			display.drawBox(dash_X, dash_Y, dash_W / 2 - s, dash_H / 2);
 			p_joystick = &J1;
 
 			//  J1.function = ( analogRead(J3.m_pin) > 1000 ) ? selectedFunction++ % 3  : J1.function;
@@ -658,7 +667,7 @@ void showJoyCfgScreen( const char* i_title , void (*action)(void*) )
 			if (p_joystick != &J2)
 				slctr.begin();
 
-			display.drawBox(dash_X, dash_Y + dash_H / 2 + s, dash_W / 2 - s, dash_H / 2 + s);
+			display.drawBox(dash_X, dash_Y + dash_H / 2 + s, dash_W / 2 - s, dash_H / 2 );
 			p_joystick = &J2;
 		}
 
@@ -667,7 +676,7 @@ void showJoyCfgScreen( const char* i_title , void (*action)(void*) )
 			if (p_joystick != &J3)
 				slctr.begin();
 
-			display.drawBox(dash_X + dash_W / 2, dash_Y + dash_H / 2 + s, dash_W / 2 - s, dash_H / 2 + s);
+			display.drawBox(dash_X + dash_W / 2, dash_Y + dash_H / 2 + s, dash_W / 2 , dash_H / 2 );
 			p_joystick = &J3;
 		}
 
@@ -676,7 +685,7 @@ void showJoyCfgScreen( const char* i_title , void (*action)(void*) )
 			if (p_joystick != &J4)
 				slctr.begin();
 
-			display.drawBox(dash_X + dash_W / 2, dash_Y, dash_W / 2 - s, dash_H / 2 + s);
+			display.drawBox(dash_X + dash_W / 2, dash_Y, dash_W / 2 , dash_H / 2 );
 			p_joystick = &J4;
 		}
 		)
