@@ -4,7 +4,7 @@
 	Author:     NTNET\ROMANL
 */
 #ifndef UNIT_TEST
-#define ENABLE_LOGGER
+//#define ENABLE_LOGGER
 #include <SPI.h>          // библиотека для работы с шиной SPI
 #include "nRF24L01.h"     // библиотека радиомодуля
 #include "RF24.h"         // ещё библиотека радиомодуля
@@ -88,12 +88,21 @@ private:
 //public:
 	bool m_switched = false;
 	PIN m_pin = 0;
+
+	mutable short m_lastRead = 0;
 public:
-	Joystick(PIN i_pin) : m_pin(i_pin), function(not_asighned), m_formula(&parabola127) {}
+	Joystick(PIN i_pin) : m_pin(i_pin), function(not_asighned), m_formula(&parabola127){}
 
 	short read() const
 	{
 		short value = analogRead(m_pin);
+		
+		if (m_lastRead && abs( value - m_lastRead ) > 300 )
+		{
+			return m_lastRead;
+		}
+
+		m_lastRead = value;
 
 		if (abs(value - zero) < 10)
 			return 0;
