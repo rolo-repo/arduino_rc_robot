@@ -78,7 +78,9 @@ struct Joystick
 	enum Side { UP = 0, DOWN = 1, RIGHT = 0, LEFT = 1 };
 private:
 	unsigned short zero = 0;
-	unsigned short sens[2] = { 0 , 0 };
+	unsigned short sens[2] = { 1023 , 0 };
+	short m_max = MAX;
+	short m_min = MIN;
 
 	short function;
 
@@ -107,19 +109,19 @@ public:
 		if (abs(value - zero) < 10)
 			return 0;
 		
-		if ( !isSwitched() )
+		if ( !m_switched)
 		{
 			return constrain((this->*m_formula)((value >= zero)
-				? map(value, zero, 1023 - sens[UP], 0, MAX)
-				: map(value, 0 + sens[DOWN], zero, MIN, 0)
+				? map(value, zero, 1023 - sens[UP], 0, m_max)
+				: map(value, 0 + sens[DOWN], zero, m_min, 0)
 				)
 				, MIN, MAX);
 		}
 		else
 		{
 			return constrain((this->*m_formula)((value >= zero)
-				? map( value, zero, 1023 - sens[UP], 0, MIN )
-				: map( value, 0 + sens[DOWN], zero, MAX, 0 )
+				? map( value, zero, 1023 - sens[UP], 0, m_min )
+				: map( value, 0 + sens[DOWN], zero, m_max, 0 )
 				)
 				, MIN, MAX);
 		}
@@ -133,7 +135,7 @@ private:
 
 	short parabola127(const long& i_value) const
 	{
-		return (short)(float(i_value * i_value) * ( ( i_value > 0 ) - ( i_value < 0) ) / float(127));
+		return (short)(float)(i_value * i_value) * ( ( i_value > 0 ) - ( i_value < 0) ) / (float)m_max;
 	}
 
 public:
@@ -202,7 +204,7 @@ public:
 			if (value > 0)
 			{
 				display.setDrawColor(1);
-				display.drawBox(x_mid, y_mid, map(value, 0, MAX, 0, i_maxW / 2), i_maxH);
+				display.drawBox(x_mid, y_mid, map(value, 0, MAX , 0, i_maxW / 2), i_maxH);
 			}
 			else
 			{
@@ -243,7 +245,6 @@ public:
 		short y = i_y0;
 		short s = 2;
 
-
 		display.setFont(BIG_FONT);
 		display.setFontMode(1);//transparent mode
 		display.setDrawColor(2);
@@ -277,18 +278,32 @@ public:
 		display.setFont(SMALL_FONT);
 		display.setFontPosBaseline();
 		display.drawStr( x + w / 2 - 2 * display.getMaxCharWidth(), y + s + display.getMaxCharHeight() , itoa((this->read()), buff_4, 10));
-		display.drawStr( x + w / 2, y + h - s  , ( this->isSwitched() ) ? plus : minus );
+		display.drawStr( x + w / 2, y + s + 2 * display.getMaxCharHeight(), (m_switched) ? plus : minus );
 	}
 
 	short trim(unsigned short i_trimValue)
 	{
 		if (read() > 0)
 		{
-			sens[UP] = constrain(i_trimValue, 0, 1023 - zero);
+			sens[UP] = constrain( i_trimValue, 0 , 1023 - zero  );
 		}
 		else
 		{
-			sens[DOWN] = constrain(i_trimValue, 0, zero);
+			sens[DOWN] = constrain( i_trimValue, 0, zero );
+		}
+
+		return read();
+	}
+
+	short setMaxMin (unsigned short i_value)
+	{
+		if ( read() > 0 )
+		{
+			m_max = constrain(i_value, 0, MAX);
+		}
+		else
+		{
+			m_min = constrain(-i_value, MIN, 0);
 		}
 
 		return read();
@@ -305,14 +320,9 @@ public:
 		zero = t_zero;
 	}
 
-	void switchDirection()
+	void switchDirection(short i_ind)
 	{
-		m_switched = !m_switched;
-	}
-
-	bool isSwitched() const
-	{
-		return m_switched;
+		m_switched = i_ind % 5;
 	}
 };
 
@@ -374,7 +384,7 @@ long map(const long x, const long in_min, const long in_max, const long out_min,
 		return out_max;
 
 	else if (in_max == in_min)
-		return min(abs(in_max), abs(in_min));
+		return min(abs(out_max), abs(out_min));
 
 	// map the input to the output range.
 	// round up if mapping bigger ranges to smaller ranges
@@ -605,10 +615,13 @@ void joystickTrim ( void * i_pValue )
 
 void joystickSwitchDirection(void * i_pValue)
 {
-	Joystick *p_joystick = static_cast<Joystick*>(i_pValue);
+	static_cast<Joystick*>(i_pValue)->switchDirection(slctr.val());
+}
 
-	if ( slctr.val() % 2 ) 
-		p_joystick->switchDirection();
+void joystickSetMaxMin( void *p_joystick)
+{
+
+	static_cast<Joystick*>(p_joystick)->setMaxMin( slctr.val() * 5 );
 }
 
 void showJoyCfgScreen( const char* i_title , void (*action)(void*) )
@@ -778,8 +791,9 @@ void showMenuScreen()
 
 	MenuItem menu[] = {
 		MenuItem("SCAN",   []() { scan(); if (radio.getChannel() != CHANNEL) radio.setChannel(CHANNEL); switchMode(MENU_SCREEN); }),
-		MenuItem("THRTL",  []() { showJoyCfgScreen( "JOY-TRM" , &joystickTrim ); switchMode(MENU_SCREEN); }),
-		MenuItem("DIREC",  []() { showJoyCfgScreen("JOY-DIR" , &joystickSwitchDirection); switchMode(MENU_SCREEN); }),
+		MenuItem("THRTL",  []() { showJoyCfgScreen( "TRIM" , &joystickTrim ); switchMode(MENU_SCREEN); }),
+		MenuItem("DIREC",  []() { showJoyCfgScreen("DIRECT" , &joystickSwitchDirection); switchMode(MENU_SCREEN); }),
+		MenuItem("MIN-MAX",[]() { showJoyCfgScreen("MIN-MAX" , &joystickSetMaxMin); switchMode(MENU_SCREEN); }),
 		MenuItem("RESET",  []() { DISPLAY(drawTitle(__DATE__); );  showSaveScreen([]() { for (short i = 0; i < EEPROM.length(); i++) { EEPROM.write(i, 0); } } , []() { switchMode(MENU_SCREEN); }); }),
 		MenuItem("Back" ,  []() { switchMode(MAIN_SCREEN); })
 	};
