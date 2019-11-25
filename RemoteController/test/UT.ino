@@ -155,15 +155,15 @@ test(save_and_load)
 
 
 	unsigned short zero = 500;
-	unsigned short sens[2] = { 100 , 28 };
+	unsigned short analogLimits[2] = { 100 , 28 };
 	bool m_switched = true;
 
 	//save
 	memory[index++] = 0b11001100;
 
-	const unsigned char *t = (const unsigned char*)sens;
+	const unsigned char *t = (const unsigned char*)analogLimits;
 
-	for (auto i = 0; i < sizeof(sens); i++)
+	for (auto i = 0; i < sizeof(analogLimits); i++)
 	{
 		memory[index++] = t[i];
 	}
@@ -176,7 +176,7 @@ test(save_and_load)
 //load
 	index = 0;
 	assertEqual(memory[index++], 0b11001100);
-	for (auto i = 0; i < sizeof(sens); i++)
+	for (auto i = 0; i < sizeof(analogLimits); i++)
 	{
 	    assertEqual( t[i] ,memory[index++] );
 	}

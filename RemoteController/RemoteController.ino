@@ -54,9 +54,6 @@
 #define J3_PIN J2_H_PIN
 #define J4_PIN J2_V_PIN
 
-char  MAX = 127;
-char  MIN = -127;
-
 char buff_4[5];
 
 constexpr short speed = 0;
@@ -75,12 +72,17 @@ U8G2_SH1106_128X64_NONAME_2_HW_I2C display(U8G2_R0, /* reset=*/ OLED_RESET);
 
 struct Joystick
 {
-	enum Side { UP = 0, DOWN = 1, RIGHT = 0, LEFT = 1 };
+	enum J_ENUM { MAX = 0, MIN = 1};
 private:
+	static const short S_MAX =  127;
+	static const short S_MIN = -127;
+
+	static const short A_MAX = 1023;
+	static const short A_MIN = 0;
+
 	unsigned short zero = 0;
-	unsigned short sens[2] = { 1023 , 0 };
-	short m_max = MAX;
-	short m_min = MIN;
+	short analogLimits[2] = { A_MAX , A_MIN };
+	short softLimits[2] = { S_MAX , S_MIN };
 
 	short function;
 
@@ -112,18 +114,18 @@ public:
 		if ( !m_switched)
 		{
 			return constrain((this->*m_formula)((value >= zero)
-				? map(value, zero, 1023 - sens[UP], 0, m_max)
-				: map(value, 0 + sens[DOWN], zero, m_min, 0)
+				? map(value, zero, analogLimits[MAX], 0, softLimits[MAX])
+				: map(value, analogLimits[MIN], zero, softLimits[MIN], 0)
 				)
-				, MIN, MAX);
+				, S_MIN, S_MAX);
 		}
 		else
 		{
 			return constrain((this->*m_formula)((value >= zero)
-				? map( value, zero, 1023 - sens[UP], 0, m_min )
-				: map( value, 0 + sens[DOWN], zero, m_max, 0 )
+				? map( value, zero, analogLimits[MAX], 0, softLimits[MIN] )
+				: map( value, analogLimits[MIN], zero, softLimits[MAX], 0 )
 				)
-				, MIN, MAX);
+				, S_MIN, S_MAX);
 		}
 		
 	}
@@ -135,7 +137,7 @@ private:
 
 	short parabola127(const long& i_value) const
 	{
-		return (short)(float)(i_value * i_value) * ( ( i_value > 0 ) - ( i_value < 0) ) / (float)m_max;
+		return (short)(float)(i_value * i_value) * ((i_value > 0) - (i_value < 0)) / (float)softLimits[MAX];
 	}
 
 public:
@@ -143,11 +145,18 @@ public:
 	{
 		unsigned short index = i_idx;
 
-		EEPROM.update(index++, 0b11001100);
+		EEPROM.update(index++, 0b11001101);
 
-		const unsigned char *t = (const unsigned char*)sens;
+		const unsigned char *t = (const unsigned char*)analogLimits;
 
-		for (auto i = 0; i < sizeof(sens); i++)
+		for (auto i = 0; i < sizeof(analogLimits); i++)
+		{
+			EEPROM.update(index++, t[i]);
+		}
+
+		t = (const unsigned char*)softLimits;
+
+		for (auto i = 0; i < sizeof(softLimits); i++)
 		{
 			EEPROM.update(index++, t[i]);
 		}
@@ -163,11 +172,18 @@ public:
 	{
 		unsigned short index = i_idx;
 
-		if (0b11001100 == EEPROM.read(index++))
+		if (0b11001101 == EEPROM.read(index++))
 		{
-			unsigned char *t = (unsigned char*)sens;
+			unsigned char *t = (unsigned char*)analogLimits;
 			
-			for (auto i = 0; i < sizeof(sens); i++)
+			for (auto i = 0; i < sizeof(analogLimits); i++)
+			{
+				t[i] = EEPROM.read(index++);
+			}
+
+			t = (unsigned char*)softLimits;
+
+			for (auto i = 0; i < sizeof(softLimits); i++)
 			{
 				t[i] = EEPROM.read(index++);
 			}
@@ -204,14 +220,14 @@ public:
 			if (value > 0)
 			{
 				display.setDrawColor(1);
-				display.drawBox(x_mid, y_mid, map(value, 0, MAX , 0, i_maxW / 2), i_maxH);
+				display.drawBox(x_mid, y_mid, map(value, 0, S_MAX, 0, i_maxW / 2), i_maxH);
 			}
 			else
 			{
 				display.setDrawColor(1);
 				display.drawBox(i_x0, i_y0, i_maxW / 2, i_maxH);
 				display.setDrawColor(0);
-				display.drawBox(i_x0, i_y0, map(MIN - value, MIN, 0, i_maxW / 2, 0), i_maxH);
+				display.drawBox(i_x0, i_y0, map(S_MIN - value, S_MIN, 0, i_maxW / 2, 0), i_maxH);
 			}
 
 			display.setDrawColor(0);
@@ -224,12 +240,12 @@ public:
 				display.setDrawColor(1);
 				display.drawBox(i_x0, i_y0, i_maxW, i_maxH / 2);
 				display.setDrawColor(0);
-				display.drawBox(i_x0, i_y0, i_maxW, map(MAX - value, 0, MAX, 0, i_maxH / 2));
+				display.drawBox(i_x0, i_y0, i_maxW, map(S_MAX - value, 0, S_MAX, 0, i_maxH / 2));
 			}
 			else
 			{
 				display.setDrawColor(1);
-				display.drawBox(i_x0, y_mid, i_maxW, map(value, MIN, 0, i_maxH / 2, 0));
+				display.drawBox(i_x0, y_mid, i_maxW, map(value, S_MIN, 0, i_maxH / 2, 0));
 			}
 
 			display.setDrawColor(0);
@@ -283,13 +299,19 @@ public:
 
 	short trim(unsigned short i_trimValue)
 	{
-		if (read() > 0)
+		short value = analogRead(m_pin);
+
+		if ( value > zero + 50 )
 		{
-			sens[UP] = constrain( i_trimValue, 0 , 1023 - zero  );
+			analogLimits[MAX] = ( ( constrain(value, zero, A_MAX ) > analogLimits[MAX] || 
+				analogLimits[MAX] == A_MAX ) ? 
+				value : analogLimits[MAX] );
 		}
-		else
+		else if ( value < zero - 50 )
 		{
-			sens[DOWN] = constrain( i_trimValue, 0, zero );
+			analogLimits[MIN] = ( ( constrain(value, 0, zero ) < analogLimits[MIN] || 
+				analogLimits[MIN] == A_MIN ) ? 
+				value : analogLimits[MIN] );
 		}
 
 		return read();
@@ -297,13 +319,15 @@ public:
 
 	short setMaxMin (unsigned short i_value)
 	{
-		if ( read() > 0 )
+		short value = analogRead(m_pin);
+
+		if (value > zero + 10)
 		{
-			m_max = constrain(i_value, 0, MAX);
+			softLimits[MAX] = constrain(S_MAX - i_value, 0, S_MAX);
 		}
-		else
+		else if (value < zero - 10)
 		{
-			m_min = constrain(-i_value, MIN, 0);
+			softLimits[MIN] = constrain(S_MIN + i_value, S_MIN, 0);
 		}
 
 		return read();
@@ -312,11 +336,12 @@ public:
 	void reset()
 	{
 		short t_zero = analogRead(m_pin);
-		if (0 != zero)
+	/*	if (0 != zero)
 		{
-			sens[UP] += (zero - t_zero);
-			sens[DOWN] -= (zero - t_zero);
-		}
+			analogLimits[MAX] += (zero - t_zero);
+			analogLimits[MIN] -= (zero - t_zero);
+		}*/
+		//all other members are get default in constructor
 		zero = t_zero;
 	}
 
@@ -613,15 +638,14 @@ void joystickTrim ( void * i_pValue )
 	}
 }
 
-void joystickSwitchDirection(void * i_pValue)
+void joystickSwitchDirection( void * i_pValue )
 {
 	static_cast<Joystick*>(i_pValue)->switchDirection(slctr.val());
 }
 
 void joystickSetMaxMin( void *p_joystick)
 {
-
-	static_cast<Joystick*>(p_joystick)->setMaxMin( slctr.val() * 5 );
+	static_cast<Joystick*>(p_joystick)->setMaxMin( slctr.val() );
 }
 
 void showJoyCfgScreen( const char* i_title , void (*action)(void*) )
@@ -641,9 +665,9 @@ void showJoyCfgScreen( const char* i_title , void (*action)(void*) )
 	);
 
 	slctr.begin();
-	do
+	while (mode != LAST)
 	{
-		button.run();
+		//button.run();
 
 		DISPLAY
 		(
@@ -714,7 +738,7 @@ void showJoyCfgScreen( const char* i_title , void (*action)(void*) )
 
 		action((void*)p_joystick);
 		button.run();
-	} while (mode != LAST);
+	};
 }
 
 short drawTitle(const char* i_title)
