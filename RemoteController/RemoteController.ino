@@ -90,7 +90,7 @@ private:
 	using formula = short(Joystick::*)(const long&) const;
 	formula m_formula;
 //public:
-	bool m_switched = false;
+	bool m_reversed = false;
 	PIN m_pin = 0;
 
 	mutable short m_lastRead = 0;
@@ -111,7 +111,7 @@ public:
 		if (abs(value - zero) < 10)
 			return 0;
 		
-		if ( !m_switched)
+		if ( !m_reversed)
 		{
 			return constrain((this->*m_formula)((value >= zero)
 				? map(value, zero, analogLimits[MAX], 0, softLimits[MAX])
@@ -163,7 +163,7 @@ public:
 
 		EEPROM.update(index++, (unsigned char)zero);
 		EEPROM.update(index++, (unsigned char)(zero >> 8));
-		EEPROM.update(index++, (unsigned char)m_switched);
+		EEPROM.update(index++, (unsigned char)m_reversed);
 
 		return index;
 	}
@@ -190,7 +190,7 @@ public:
 
 			zero = EEPROM.read(index++) | EEPROM.read(index++) << 8;
 
-			m_switched = EEPROM.read(index++) & 0x1;
+			m_reversed = EEPROM.read(index++) & 0x1;
 		}
 
 		return index;
@@ -285,19 +285,26 @@ public:
 		    <>  |
 		*/
 
-		static constexpr char* plus = "+";
-		static constexpr char* minus = "-";
+		static constexpr char* plus = "nor:";
+		static constexpr char* minus = "rev:";
 
 	    display.drawFrame(x, y, w, h);
 		display.setDrawColor(2);
 		display.setFontMode(1);//transparent mode
 		display.setFont(SMALL_FONT);
 		display.setFontPosBaseline();
-		display.drawStr( x + w / 2 - 2 * display.getMaxCharWidth(), y + s + display.getMaxCharHeight() , itoa((this->read()), buff_4, 10));
-		display.drawStr( x + w / 2, y + s + 2 * display.getMaxCharHeight(), (m_switched) ? plus : minus );
+		short line_y = y + s + display.getMaxCharHeight();
+		display.drawStr( x  + s + display.drawStr( x + s, line_y, (m_reversed) ? plus : minus) + s,
+			line_y, itoa((this->read()), buff_4, 10));
+
+		line_y += display.getMaxCharHeight();
+		
+		display.drawStr( x + s , line_y ,(String(softLimits[MAX]) + String('|') + String(softLimits[MIN])).c_str() );
+
+		line_y += display.getMaxCharHeight();
 	}
 
-	short trim(unsigned short i_trimValue)
+	short trim(short)
 	{
 		short value = analogRead(m_pin);
 
@@ -317,15 +324,15 @@ public:
 		return read();
 	}
 
-	short setMaxMin (unsigned short i_value)
+	short setMaxMin (short i_value)
 	{
 		short value = analogRead(m_pin);
 
-		if (value > zero + 10)
+		if (value > zero + 50)
 		{
 			softLimits[MAX] = constrain(S_MAX - i_value, 0, S_MAX);
 		}
-		else if (value < zero - 10)
+		else if (value < zero - 50)
 		{
 			softLimits[MIN] = constrain(S_MIN + i_value, S_MIN, 0);
 		}
@@ -335,19 +342,12 @@ public:
 
 	void reset()
 	{
-		short t_zero = analogRead(m_pin);
-	/*	if (0 != zero)
-		{
-			analogLimits[MAX] += (zero - t_zero);
-			analogLimits[MIN] -= (zero - t_zero);
-		}*/
-		//all other members are get default in constructor
-		zero = t_zero;
+		zero = analogRead(m_pin);
 	}
 
 	void switchDirection(short i_ind)
 	{
-		m_switched = i_ind % 5;
+		m_reversed = i_ind % 5;
 	}
 };
 
@@ -815,9 +815,9 @@ void showMenuScreen()
 
 	MenuItem menu[] = {
 		MenuItem("SCAN",   []() { scan(); if (radio.getChannel() != CHANNEL) radio.setChannel(CHANNEL); switchMode(MENU_SCREEN); }),
-		MenuItem("THRTL",  []() { showJoyCfgScreen( "TRIM" , &joystickTrim ); switchMode(MENU_SCREEN); }),
-		MenuItem("DIREC",  []() { showJoyCfgScreen("DIRECT" , &joystickSwitchDirection); switchMode(MENU_SCREEN); }),
-		MenuItem("MIN-MAX",[]() { showJoyCfgScreen("MIN-MAX" , &joystickSetMaxMin); switchMode(MENU_SCREEN); }),
+		MenuItem("TRIM",  []() { showJoyCfgScreen( "TRIM" , &joystickTrim ); switchMode(MENU_SCREEN); }),
+		MenuItem("SRV-REV",  []() { showJoyCfgScreen("SRV-REV" , &joystickSwitchDirection); switchMode(MENU_SCREEN); }),
+		MenuItem("SRV-MIN_MAX",[]() { showJoyCfgScreen("MIN-MAX" , &joystickSetMaxMin); switchMode(MENU_SCREEN); }),
 		MenuItem("RESET",  []() { DISPLAY(drawTitle(__DATE__); );  showSaveScreen([]() { for (short i = 0; i < EEPROM.length(); i++) { EEPROM.write(i, 0); } } , []() { switchMode(MENU_SCREEN); }); }),
 		MenuItem("Back" ,  []() { switchMode(MAIN_SCREEN); })
 	};

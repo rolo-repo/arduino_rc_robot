@@ -156,7 +156,7 @@ test(save_and_load)
 
 	unsigned short zero = 500;
 	unsigned short analogLimits[2] = { 100 , 28 };
-	bool m_switched = true;
+	bool m_reversed = true;
 
 	//save
 	memory[index++] = 0b11001100;
@@ -170,7 +170,7 @@ test(save_and_load)
 
 	memory[index++] = (unsigned char)zero;
 	memory[index++] = (unsigned char)(zero >> 8);
-	memory[index++] = (unsigned char)m_switched;
+	memory[index++] = (unsigned char)m_reversed;
 
 	unsigned short lastIndex = index;
 //load
@@ -182,7 +182,7 @@ test(save_and_load)
 	}
 
 	assertEqual( zero , memory[index++] | memory[index++] << 8);
-	assertEqual( (short)m_switched ,memory[index++] & 0x1 );
+	assertEqual( (short)m_reversed ,memory[index++] & 0x1 );
 
 	assertEqual(lastIndex, index);
 }
