@@ -92,16 +92,12 @@ private:
 //public:
 	bool m_reversed = false;
 	PIN m_pin = 0;
-
-	mutable short m_lastRead = 0;
 public:
 	Joystick(PIN i_pin) : m_pin(i_pin), function(not_asighned), m_formula(&parabola127){}
 
 	short read() const
 	{
 		short value = analogRead(m_pin);
-
-		m_lastRead = value;
 
 		if (abs(value - zero) < 10)
 			return 0;
@@ -1017,7 +1013,7 @@ void loop()
 	data.m_j[3] = J4.read();
 
 	if ( ( (data == transmit_data) && lastTransmitionTime > millis() - arduino::utils::RF_TIMEOUT_MS )  
-		||  lastTransmitionTime - millis() < 5 )
+		||  (!( data == transmit_data ) && lastTransmitionTime > millis() - 10 )  )
 	{
 		return;//no need to handle ,  nothing changed no timeout occurred
 	}
