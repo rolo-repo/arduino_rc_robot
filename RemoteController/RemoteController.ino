@@ -277,17 +277,18 @@ public:
 			w -= ( nameSize + s ) ;
 		}
 
-		short line_y = y + s + display.getMaxCharHeight();
-
-		display.drawLine( x + w / 2 -s , y , x + w / 2 - s , y + h - s );
-		display.setDrawColor(2);
-		display.setFontMode(1);//transparent mode
-		display.setFont(SMALL_FONT);
-		display.setFontPosBaseline();
-
-		line_y = y + s + display.getMaxCharHeight();
-
 		{
+			short line_y = y + s + display.getMaxCharHeight();
+
+			display.drawLine( x + w / 2 -s , y , x + w / 2 - s , y + h - s );
+			display.setDrawColor(2);
+			display.setFontMode(1);//transparent mode
+			display.setFont(SMALL_FONT);
+			display.setFontPosBaseline();
+
+			line_y = y + s + display.getMaxCharHeight();
+
+		
 			display.drawStr( x + s, line_y, ( flip && m_reversed ) ? itoa(analogLimits[MAX], buff_4, 10) : itoa(analogLimits[MIN], buff_4, 10) );
 			display.drawStr( x + s + s + w / 2, line_y, ( flip  && m_reversed ) ? itoa(analogLimits[MIN], buff_4, 10) : itoa(analogLimits[MAX], buff_4, 10));
 			
