@@ -248,7 +248,7 @@ public:
 		}
 	}
 
-	void drawDetails( const char* i_name , short i_x0, short i_y0, short i_maxW, short i_maxH, bool i_flip = false) const
+	void drawDetails( const char* i_name , short i_x0, short i_y0, short i_maxW, short i_maxH, bool flip = false) const
 	{
 		short h = i_maxH;
 		short w = i_maxW;
@@ -256,11 +256,14 @@ public:
 		short y = i_y0;
 		short s = 1;
 
+		flip = x - i_maxW < 0;
+
 		display.setFont(BIG_FONT);
 		display.setFontMode(1);//transparent mode
 		display.setDrawColor(2);
 		display.setFontPosCenter();
-		if ( x - i_maxW  < 0)
+		
+		if ( flip )
 		{
 			unsigned char nameSize = display.drawStr(x + s, y + h/2 + s + s, i_name);
 
@@ -273,39 +276,25 @@ public:
 
 			w -= ( nameSize + s ) ;
 		}
-		
-		/*
-		 _______
-		 | -127 |
-		    <>  |
-		*/
+
 		short line_y = y + s + display.getMaxCharHeight();
 
-	//    display.drawFrame(x, y, w, h);
 		display.drawLine( x + w / 2 -s , y , x + w / 2 - s , y + h - s );
 		display.setDrawColor(2);
 		display.setFontMode(1);//transparent mode
 		display.setFont(SMALL_FONT);
 		display.setFontPosBaseline();
-		
-		//display.drawStr( x + s, line_y + s + display.getMaxCharHeight(), (m_reversed) ? ":+:" : ":-:");
 
 		line_y = y + s + display.getMaxCharHeight();
-	/*	
-		display.drawStr(x + s + s + display.drawStr(x + s, line_y, (m_reversed) ? ":+:" : ":-:")
-				, line_y
-				, itoa((this->read()), buff_4, 10));
-				*/
-
 
 		{
-			display.drawStr( x + s, line_y, itoa(analogLimits[MAX], buff_4, 10));
-			display.drawStr( x + s + s + w / 2, line_y, itoa(analogLimits[MIN], buff_4, 10));
+			display.drawStr( x + s, line_y, ( flip && m_reversed ) ? itoa(analogLimits[MAX], buff_4, 10) : itoa(analogLimits[MIN], buff_4, 10) );
+			display.drawStr( x + s + s + w / 2, line_y, ( flip  && m_reversed ) ? itoa(analogLimits[MIN], buff_4, 10) : itoa(analogLimits[MAX], buff_4, 10));
 			
 			line_y += display.getMaxCharHeight() + 1;
 
-			display.drawStr( x + s, line_y, itoa(softLimits[MAX], buff_4, 10));
-			display.drawStr( x + s + s + w / 2, line_y, itoa(softLimits[MIN], buff_4, 10));
+			display.drawStr( x + s, line_y, ( flip  && m_reversed ) ?  itoa(softLimits[MAX], buff_4, 10) : itoa(softLimits[MIN], buff_4, 10));
+			display.drawStr( x + s + s + w / 2, line_y, ( flip  && m_reversed ) ?  itoa(softLimits[MIN], buff_4, 10) : itoa(softLimits[MAX], buff_4, 10));
 		}
 	}
 
