@@ -95,7 +95,7 @@ private:
 public:
 	Joystick(PIN i_pin) : m_pin(i_pin), function(not_asighned), m_formula(&parabola127){}
 
-	short read() const
+	char read() const
 	{
 		short value = analogRead(m_pin);
 
@@ -189,8 +189,6 @@ public:
 
 	void drawBar( short i_x0, short i_y0, short i_maxW, short i_maxH) const
 	{
-		short value = this->read();
-
 		bool horizontal = (i_maxW > i_maxH);
 
 		display.setDrawColor(1);
@@ -205,6 +203,7 @@ public:
 		short x_mid = (horizontal) ? (i_x0 + i_maxW / 2) : i_x0;
 		short y_mid = (horizontal) ? i_y0 : (i_y0 + i_maxH / 2);
 
+		short value = this->read();
 
 		if (horizontal)
 		{
@@ -280,16 +279,31 @@ public:
 			display.setFontMode(1);//transparent mode
 			display.setFont(SMALL_FONT);
 			display.setFontPosBaseline();
+			if ( flip )
+			{
+				y += s + display.getMaxCharHeight();
 
-			y += s + display.getMaxCharHeight();
+				display.drawStr(x + s, y, (m_reversed) ? itoa(analogLimits[MAX], buff_4, 10) : itoa(analogLimits[MIN], buff_4, 10));
+				display.drawStr(x + s + s + w / 2, y, (m_reversed) ? itoa(analogLimits[MIN], buff_4, 10) : itoa(analogLimits[MAX], buff_4, 10));
 
-			display.drawStr( x + s, y, ( flip && m_reversed ) ? itoa(analogLimits[MAX], buff_4, 10) : itoa(analogLimits[MIN], buff_4, 10) );
-			display.drawStr( x + s + s + w / 2, y, ( flip  && m_reversed ) ? itoa(analogLimits[MIN], buff_4, 10) : itoa(analogLimits[MAX], buff_4, 10));
+				y += s + display.getMaxCharHeight();
+
+				display.drawStr(x + s, y, (m_reversed) ? itoa(softLimits[MAX], buff_4, 10) : itoa(softLimits[MIN], buff_4, 10));
+				display.drawStr(x + s + s + w / 2, y, (m_reversed) ? itoa(softLimits[MIN], buff_4, 10) : itoa(softLimits[MAX], buff_4, 10));
+			}
+			else
+			{
+				y += s + display.getMaxCharHeight();
+
+				display.drawStr(x + s, y, (m_reversed) ? itoa(analogLimits[MIN], buff_4, 10) : itoa(analogLimits[MAX], buff_4, 10));
+				display.drawStr(x + s + s + w / 2, y, (m_reversed) ? itoa(analogLimits[MAX], buff_4, 10) : itoa(analogLimits[MIN], buff_4, 10));
+
+				y += s + display.getMaxCharHeight();
+
+				display.drawStr(x + s, y, (m_reversed) ? itoa(softLimits[MIN], buff_4, 10) : itoa(softLimits[MAX], buff_4, 10));
+				display.drawStr(x + s + s + w / 2, y, (m_reversed) ? itoa(softLimits[MAX], buff_4, 10) : itoa(softLimits[MIN], buff_4, 10));
+			}
 			
-			y += s + display.getMaxCharHeight();
-
-			display.drawStr( x + s, y, ( flip  && m_reversed ) ?  itoa(softLimits[MAX], buff_4, 10) : itoa(softLimits[MIN], buff_4, 10));
-			display.drawStr( x + s + s + w / 2, y, ( flip  && m_reversed ) ?  itoa(softLimits[MIN], buff_4, 10) : itoa(softLimits[MAX], buff_4, 10));
 		}
 	}
 
@@ -342,11 +356,6 @@ Joystick joysticks[] = { Joystick(J1_PIN) , Joystick(J2_PIN) ,Joystick(J3_PIN) ,
 #define J2 joysticks[1]
 #define J3 joysticks[2]
 #define J4 joysticks[3]
-
-//////////////////////////////////////////////////////////////////////////
-
-PIN  SPEED_PIN = J1_V_PIN;
-PIN  STEERING_PIN = J2_H_PIN;
 
 //////////////////////////////////////////////////////////////////////////
 #define DISPLAY_128_64
@@ -968,13 +977,12 @@ void setup()
 
 	J4.load(J3.load(J2.load(J1.load())));
 
-	J1.reset(); J2.reset(); J3.reset(); J4.reset();
+	J1.reset(); 
+	J2.reset(); 
+	J3.reset(); 
+	J4.reset();
 
 	switchMode(MAIN_SCREEN);
-	/*
-		LOG_MSG(F("Zero values are D1 V,H ") << J1.zero << F(",") << J2.zero);
-		LOG_MSG(F("Zero values are D2 V,H ") << J4.zero << F(",") << J3.zero);*/
-
 	activityLed.fade(1000);
 }
 
@@ -1009,11 +1017,11 @@ void loop()
 	data.m_speed = J1.read();
 	data.m_steering = J3.read();
 
-	data.m_j[2] = J2.read();
-	data.m_j[3] = J4.read();
+	data.m_j3 = J2.read();
+	data.m_j4 = J4.read();
 
 	if ( ( (data == transmit_data) && lastTransmitionTime > millis() - arduino::utils::RF_TIMEOUT_MS )  
-		||  (!( data == transmit_data ) && lastTransmitionTime > millis() - 10 )  )
+		||  (!( data == transmit_data ) && lastTransmitionTime > millis() - 5 ) )
 	{
 		return;//no need to handle ,  nothing changed no timeout occurred
 	}
@@ -1022,10 +1030,7 @@ void loop()
 	refreshScreen();
 
 	transmit_data = data;
-	/*
-	LOG_MSG(F("Speed: ") << transmit_data.m_speed <<
-		F(" Steering: ") << transmit_data.m_steering);
-		*/
+
 	lastTransmitionTime = millis();
 
 	radio.write(transmit_data.finalize(), sizeof(transmit_data));
