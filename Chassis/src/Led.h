@@ -32,7 +32,7 @@ class Led
 	friend class RGBLed;
 public:
 	
-	enum class Brightness { _20, _50, _100 };
+	 enum class Brightness { _20, _50, _100 };
 	
 	Led( PIN i_ledPin = LED_BUILTIN ) :m_pin(i_ledPin) 
 	{ 
@@ -41,13 +41,13 @@ public:
 		digitalWrite(m_pin, LOW);
 	}
 
-	void turn_on(const Brightness &_brtness = Brightness::_50 );
+	void turn_on(Brightness i_brtness = Brightness::_50 );
 	void turn_off()
 	{
 		digitalWrite(m_pin, LOW );
 		m_status = LedStS::OFF;
 	}
-	void blynk(const Brightness& i_brtness = Brightness::_50 )
+	void blynk(Brightness i_brtness = Brightness::_50 )
 	{
 		(m_status == LedStS::OFF) ? turn_on(i_brtness) : turn_off();
 	}
@@ -119,7 +119,7 @@ protected:
 	char m_lastUsedLed;
 };
 
-void Led::turn_on( const Brightness &i_brtness )
+void Led::turn_on( Brightness i_brtness )
 {
 	switch (i_brtness)
 	{

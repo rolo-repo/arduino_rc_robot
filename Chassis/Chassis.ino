@@ -4,7 +4,7 @@
     Author:     NTNET\ROMANL
 */
 #ifndef UNIT_TEST
-#define ENABLE_LOGGER
+//#define ENABLE_LOGGER
 #include <SPI.h>
 #include "nRF24L01.h"
 #include "RF24.h"
@@ -21,8 +21,11 @@
 
 #define PIN unsigned int
 
-unsigned char address[][6] = { "1Node","2Node","3Node","4Node","5Node","6Node" }; // pipe address
+unsigned char address[][6] = { "1Node" }; // pipe address
 //char recieved_data[4];
+
+// long is 4 bytes
+// int = short is 2 bytes
 
 //On boards other than the Mega, use of the library disables analogWrite() 
 //(PWM) functionality on pins 9 and 10, whether or not there is a Servo on those pins.
@@ -35,53 +38,73 @@ unsigned char address[][6] = { "1Node","2Node","3Node","4Node","5Node","6Node" }
 #define MAX_RIGHT 75
 #define OD_MIN_DISTANCE_CM 5
 
-int SERVO_ZERO = 45;
 /*
-L298N shield 
+L298N shield
 Function	    Ch. A  |  Ch. B
 Direction	    D12	   |   D13
 PWM	            D3	   |   D11
 Brake	        D9	   |   D8
 Current Sensing	A0	   |   A1
 */
-
 /*
-    L298N connection
-    ENA	Pin 11	--- not required
-    IN1	Pin 9
-    IN2	Pin 8
-    IN3	Pin 7
-    IN4	Pin 6
-    ENB	Pin 10
+	L298N connection
+	ENA	Pin 11	--- not required
+	IN1	Pin 9
+	IN2	Pin 8
+	IN3	Pin 7
+	IN4	Pin 6
+	ENB	Pin 10
 */
 
 /*
-Radio 
-    CE   D9    SCN  D10
-    SCK  D13
-    MOSI D11
-    MISO D12
+Radio
+	CE   D9    SCN  D10
+	SCK  D13
+	MOSI D11
+	MISO D12
 */
 
+#if defined ARDUINO_AVR_UNO || defined ARDUINO_AVR_NANO
+constexpr PIN motorFrdPin = 2; //INT0
+constexpr PIN motorSpdPin = 3; //PWM //INT1
+constexpr PIN motorBwdPin = 4;
 
+//5 //PWM
+constexpr PIN backLightPin		= 6; //PWM
 
-//Steering Servo 
-const PIN servoPin = 5;
+constexpr PIN radioCE_Pin		= 7;
+constexpr PIN radioSCN_Pin		= 8;
 
-//Objects detection
-const PIN trigPin = A1;
-const PIN echoPin = A2;
+constexpr PIN steeringSrvPin	= 9; //no PWM due to servo
+constexpr PIN turretSrvPin		= 10;//no PWM due to servo
 
-//Radio
-const PIN radioCE = 7;
-const PIN radioSCN = 8;
+//MOSI 11 used for radio
+//MISO 12 used for radio
+//SCK  13 used for radio
 
-BTS7960_1PWM motor( 2, 4, 3 ) ;
+constexpr PIN headLightPin  = A0;
+constexpr PIN trigPin		= A1;
+constexpr PIN echoPin		= A2;
+constexpr PIN cannonSrvPin  = A3;
+//A4 SDA
+//A5 SCL
+
+#ifdef ARDUINO_AVR_NANO
+//A6
+//A7
+#endif // ARDUINO_AVR_NANO
+
+#endif ARDUINO_AVR_UNO || defined ARDUINO_AVR_NANO
+
+int SERVO_ZERO = 45;
+
+BTS7960_1PWM motor(motorFrdPin, motorBwdPin, motorSpdPin);
 Servo servo;
 
-RF24 radio( radioCE, radioSCN );
+RF24 radio( radioCE_Pin, radioSCN_Pin );
 
-Led led(A0);
+Led headLight( headLightPin );
+Led backLight( backLightPin );
 
 //return distance in cm
 unsigned long getDistance()
@@ -103,14 +126,14 @@ void setup()
     using namespace arduino::utils;
  //   LOG_MSG_BEGIN(115200);
 
-	Serial.begin(115200);
+	//Serial.begin(115200);
 
     pinMode( trigPin , OUTPUT );
     pinMode( echoPin , INPUT );
 	
 	motor.begin();
-    servo.attach( servoPin );
-	led.turn_off();
+    servo.attach( steeringSrvPin , MAX_LEFT , MAX_RIGHT);
+	headLight.turn_off();
 
     radio.begin(); //активировать модуль
     radio.setAutoAck(1);         //режим подтверждения приёма, 1 вкл 0 выкл
@@ -126,9 +149,11 @@ void setup()
 
 
     radio.powerUp(); //начать работу
-	led.fade(500);
+	headLight.fade(500);
 	radio.startListening();  //начинаем слушать эфир, мы приёмный модуль
 	
+	backLight.turn_on(Led::Brightness::_50);
+
    // SERVO_ZERO = EEPROM.read(0);
 	LOG_MSG("Init success");
 }
@@ -155,18 +180,31 @@ long map(const long x, const long in_min, const long in_max, const long out_min,
 }
 
 
+//1 gate - > 1K put devider 1 to 10K to ground
+//2 drain  +
+//3 source -
+//  d -> s
+
+
+//B 1K
+//C +
+//E -
+//C -> E
+
 void loop() 
 {
 	
     using namespace arduino::utils;
     byte pipeNo;
     static short curSteering = 90;
+	static short curSpeed = 0;
     static unsigned long lastRecievedTime = millis();
-    static bool OD_ENABLED = !( 0 == getDistance() ); //If the sensor is connect the value will be different than 0
+   
+	static bool OD_ENABLED = !( 0 == getDistance() ); //If the sensor is connect the value will be different than 0
     static Payload recieved_data;
-    static short LED = HIGH;
     short obstacleIteration = 0;
-	unsigned char speed = 0;
+
+	static bool lightsOn = false;
     while ( OD_ENABLED && getDistance() < OD_MIN_DISTANCE_CM )
     {
         LOG_MSG( "Obstacle detected " << getDistance() << " cm");
@@ -174,7 +212,7 @@ void loop()
         if ( motor.getDirection() == Motor::Direction::FORWARD )
         {
             motor.backward( 100 );
-            led.rapid_blynk(1000);
+			headLight.rapid_blynk(1000);
             if ( servo.read() > SERVO_ZERO )
             {
                 servo.write( MAX_LEFT );
@@ -184,7 +222,7 @@ void loop()
 				servo.write( MAX_RIGHT );
             }
             motor.forward( 100 );
-			led.rapid_blynk(500);
+			headLight.rapid_blynk(500);
         }
         else
         {
@@ -194,9 +232,9 @@ void loop()
         {
             LOG_MSG("Not able to avoid obstacle");
             servo.write(SERVO_ZERO);
-			led.rapid_blynk( 100 );
+			headLight.rapid_blynk( 100 );
             motor.backward( 100 );
-			led.fade(2000);
+			headLight.fade(2000);
             return;
         }
     }
@@ -224,16 +262,16 @@ void loop()
              << F(" Direction: ") << ((recieved_data.m_speed > 0) ? F("FORWARD") : F("BACKWARD"))
              << F(" Steering: ")  << recieved_data.m_steering 
              << ((recieved_data.m_steering > 0) ? F(" LEFT") : F(" RIGHT"))) ;
-
-		led.blynk(Led::Brightness::_100);
-        
+		
+		short prevSpeed = curSpeed;
+		
 		if ( recieved_data.m_speed > 0 )
         {
-            motor.backward( map( recieved_data.m_speed, 0, 127, 0, 255 ) );
+            motor.backward( curSpeed = map( recieved_data.m_speed, 0, 127, 0, 255 ) );
         }
         else
         {
-            motor.forward( map( recieved_data.m_speed, -127 , 0 , 255 , 0 ) );
+            motor.forward( curSpeed = map( recieved_data.m_speed, -127 , 0 , 255 , 0 ) );
         }
         
         if ( recieved_data.m_steering > 0 )
@@ -245,35 +283,39 @@ void loop()
 			servo.write( curSteering = map( recieved_data.m_steering, -127, 0, MAX_RIGHT , SERVO_ZERO ));
         }
        
+		if ( recieved_data.m_b1 )
+		{
+			headLight.turn_on();
+			backLight.turn_on(Led::Brightness::_50);
+		}
+		else
+		{
+			headLight.turn_off();
+			backLight.turn_off();
+		}
+		 
+		if ( ( prevSpeed - curSpeed ) > -10 )
+			backLight.turn_on(Led::Brightness::_100);
 
-      //  servo.write(map(recieved_data.m_steering, -127, 127, MAX_RIGHT+ 50 , MAX_LEFT ));
-        
-       // LOG_MSG("New  Speed:" << motor.getSpeed() << " Steering: " << curSteering << " Direction: " << (( motor.getDirection() == Motor::FORWARD ) ? "FORWARD" : "BACKWARD" ) );
-    
-      //  servo.write( curSteering );
-       /*
-        if ( recieved_data.m_b1 )
-        {
-            LOG_MSG("Update zero servo " << servo.read());
-            EEPROM.update( 0, curSteering );
-        }
-		*/
 		payLoadAck.speed = 0;
 
 		payLoadAck.batteryLevel = servo.read();
         radio.writeAckPayload( pipeNo, &payLoadAck, sizeof(payLoadAck) );
     }
-    
+
     if ( lastRecievedTime < millis() - 3 * arduino::utils::RF_TIMEOUT_MS )
     {
 		
         LOG_MSG("Lost connection");
-        lastRecievedTime = millis();
+      
         motor.stop();
         servo.write(SERVO_ZERO);
         curSteering = servo.read();
+		curSpeed = 0;
+		backLight.fade(500);
+		headLight.fade(500);
 
-		led.fade(500);
+		lastRecievedTime = millis();
     }
 }
 
