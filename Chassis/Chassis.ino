@@ -27,10 +27,10 @@ unsigned char address[][6] = { "1Node" }; // pipe address
 // long is 4 bytes
 // int = short is 2 bytes
 
-//On boards other than the Mega, use of the library disables analogWrite() 
-//(PWM) functionality on pins 9 and 10, whether or not there is a Servo on those pins.
-// On the Mega, up to 12 servos can be used without interfering with PWM functionality; 
-// use of 12 to 23 motors will disable PWM on pins 11 and 12
+// On boards other than the Mega, use of the library disables analogWrite() 
+// (PWM) functionality on pins 9 and 10, whether or not there is a Servo on those pins.
+//  On the Mega, up to 12 servos can be used without interfering with PWM functionality; 
+//  use of 12 to 23 motors will disable PWM on pins 11 and 12
 
 //AF_DCMotor motor(3);
 
@@ -132,7 +132,7 @@ void setup()
     pinMode( echoPin , INPUT );
 	
 	motor.begin();
-    servo.attach( steeringSrvPin , MAX_LEFT , MAX_RIGHT);
+    servo.attach( steeringSrvPin );
 	headLight.turn_off();
 
     radio.begin(); //активировать модуль
