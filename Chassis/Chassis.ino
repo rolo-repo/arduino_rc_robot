@@ -4,7 +4,7 @@
     Author:     NTNET\ROMANL
 */
 #ifndef UNIT_TEST
-//#define ENABLE_LOGGER
+#define ENABLE_LOGGER
 #include <SPI.h>
 #include "nRF24L01.h"
 #include "RF24.h"
@@ -131,9 +131,13 @@ void setup()
     pinMode( trigPin , OUTPUT );
     pinMode( echoPin , INPUT );
 	
+	pinMode( headLightPin, OUTPUT );
+	pinMode( backLightPin, OUTPUT );
+
 	motor.begin();
     servo.attach( steeringSrvPin );
 	headLight.turn_off();
+	backLight.turn_off();
 
     radio.begin(); //активировать модуль
     radio.setAutoAck(1);         //режим подтверждения приёма, 1 вкл 0 выкл
@@ -147,12 +151,11 @@ void setup()
     radio.setPALevel(RF24_PA_MIN); //RF24_PA_MIN, RF24_PA_LOW, RF24_PA_HIGH, RF24_PA_MAX
     radio.setDataRate(RF24_250KBPS); //RF24_2MBPS, RF24_1MBPS, RF24_250KBPS
 
-
     radio.powerUp(); //начать работу
-	headLight.fade(500);
+
 	radio.startListening();  //начинаем слушать эфир, мы приёмный модуль
 	
-	backLight.turn_on(Led::Brightness::_50);
+	backLight.fade(1000);
 
    // SERVO_ZERO = EEPROM.read(0);
 	LOG_MSG("Init success");
@@ -261,7 +264,8 @@ void loop()
         LOG_MSG(F("RCV  Speed:") << recieved_data.m_speed 
              << F(" Direction: ") << ((recieved_data.m_speed > 0) ? F("FORWARD") : F("BACKWARD"))
              << F(" Steering: ")  << recieved_data.m_steering 
-             << ((recieved_data.m_steering > 0) ? F(" LEFT") : F(" RIGHT"))) ;
+             << ((recieved_data.m_steering > 0) ? F(" LEFT") : F(" RIGHT"))
+		     << F("Bits") << recieved_data.m_b1 << F(" ") << recieved_data.m_b2 << F(" ") << recieved_data.m_b3 << F(" ") << recieved_data.m_b4 ) ;
 		
 		short prevSpeed = curSpeed;
 		
@@ -282,11 +286,11 @@ void loop()
         {
 			servo.write( curSteering = map( recieved_data.m_steering, -127, 0, MAX_RIGHT , SERVO_ZERO ));
         }
-       
-		if ( recieved_data.m_b1 )
+		
+		if (  recieved_data.m_b3 )
 		{
-			headLight.turn_on();
-			backLight.turn_on(Led::Brightness::_50);
+			headLight.turn_on( Led::Brightness::_100 );
+			backLight.turn_on( Led::Brightness::_50 );
 		}
 		else
 		{
@@ -294,10 +298,12 @@ void loop()
 			backLight.turn_off();
 		}
 		 
-		if ( ( prevSpeed - curSpeed ) > -10 )
-			backLight.turn_on(Led::Brightness::_100);
+		if ( ( curSpeed - prevSpeed ) < 0 )
+		{
+			backLight.turn_on( Led::Brightness::_100 );
+		}
 
-		payLoadAck.speed = 0;
+		payLoadAck.speed = curSpeed;
 
 		payLoadAck.batteryLevel = servo.read();
         radio.writeAckPayload( pipeNo, &payLoadAck, sizeof(payLoadAck) );
