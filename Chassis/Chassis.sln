@@ -5,7 +5,9 @@ VisualStudioVersion = 15.0.28307.438
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Chassis", "Chassis.vcxproj", "{C5F80730-F44F-4478-BDAE-6634EFC2CA88}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Timer", "..\..\Timer\Timer.vcxproj", "{D9D6B8CE-517D-4440-B602-9D1A2BDB6C13}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "RemoteController", "..\RemoteController\RemoteController.vcxproj", "{9D1A6405-6579-41DA-A9D4-1ADAF0337CED}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Test", "..\Test\Test.vcxproj", "{92D08C38-445F-4001-A198-5CE07CAE7E86}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -17,10 +19,14 @@ Global
 		{C5F80730-F44F-4478-BDAE-6634EFC2CA88}.Debug|x86.Build.0 = Debug|Win32
 		{C5F80730-F44F-4478-BDAE-6634EFC2CA88}.Release|x86.ActiveCfg = Release|Win32
 		{C5F80730-F44F-4478-BDAE-6634EFC2CA88}.Release|x86.Build.0 = Release|Win32
-		{D9D6B8CE-517D-4440-B602-9D1A2BDB6C13}.Debug|x86.ActiveCfg = Debug|Win32
-		{D9D6B8CE-517D-4440-B602-9D1A2BDB6C13}.Debug|x86.Build.0 = Debug|Win32
-		{D9D6B8CE-517D-4440-B602-9D1A2BDB6C13}.Release|x86.ActiveCfg = Release|Win32
-		{D9D6B8CE-517D-4440-B602-9D1A2BDB6C13}.Release|x86.Build.0 = Release|Win32
+		{9D1A6405-6579-41DA-A9D4-1ADAF0337CED}.Debug|x86.ActiveCfg = Debug|Win32
+		{9D1A6405-6579-41DA-A9D4-1ADAF0337CED}.Debug|x86.Build.0 = Debug|Win32
+		{9D1A6405-6579-41DA-A9D4-1ADAF0337CED}.Release|x86.ActiveCfg = Release|Win32
+		{9D1A6405-6579-41DA-A9D4-1ADAF0337CED}.Release|x86.Build.0 = Release|Win32
+		{92D08C38-445F-4001-A198-5CE07CAE7E86}.Debug|x86.ActiveCfg = Debug|Win32
+		{92D08C38-445F-4001-A198-5CE07CAE7E86}.Debug|x86.Build.0 = Debug|Win32
+		{92D08C38-445F-4001-A198-5CE07CAE7E86}.Release|x86.ActiveCfg = Release|Win32
+		{92D08C38-445F-4001-A198-5CE07CAE7E86}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -3,7 +3,6 @@
     Created:	03/18/19 11:43:20
     Author:     NTNET\ROMANL
 */
-#ifndef UNIT_TEST
 #define ENABLE_LOGGER
 #include <SPI.h>
 #include "nRF24L01.h"
@@ -124,9 +123,7 @@ unsigned long getDistance()
 void setup() 
 {
     using namespace arduino::utils;
- //   LOG_MSG_BEGIN(115200);
-
-	//Serial.begin(115200);
+    LOG_MSG_BEGIN(115200);
 
     pinMode( trigPin , OUTPUT );
     pinMode( echoPin , INPUT );
@@ -324,5 +321,3 @@ void loop()
 		lastRecievedTime = millis();
     }
 }
-
-#endif
