@@ -3,20 +3,22 @@
     Created:	03/18/19 11:43:20
     Author:     NTNET\ROMANL
 */
-#define ENABLE_LOGGER
+
 #include <SPI.h>
 #include "nRF24L01.h"
 #include "RF24.h"
-#include "SerialOutput.h"
 #include "RFcom.h"
 
-#include <EEPROM.h>
+//#include <EEPROM.h>
 
 #include <Servo.h>
 
 #include "Motor.h"
 #include "BTS7960.h"
 #include "Led.h"
+
+#define ENABLE_LOGGER
+#include "SerialOutput.h"
 
 #define PIN unsigned int
 
@@ -295,7 +297,7 @@ void loop()
 			backLight.turn_off();
 		}
 		 
-		if ( ( curSpeed - prevSpeed ) < 0 )
+		if ( ( curSpeed - prevSpeed ) < 0 && ( curSpeed * prevSpeed ) > 0 /* same sign */ )
 		{
 			backLight.turn_on( Led::Brightness::_100 );
 		}

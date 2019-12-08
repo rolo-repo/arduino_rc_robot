@@ -220,31 +220,24 @@ test(incorrect) {
 #include "Time.h"
 #include "TimeManager.h"
 
-arduino::utils::Timer pumpTimer("[PUMP]");
 
-bool tFuncStatus = false;
-void tFunc(long& i_time)
-{
-	LOG_MSG("executing task on " << i_time);
 
-	i_time += 5;
-	tFuncStatus = ~tFuncStatus;
 
-	LOG_MSG("rescheduling to" << i_time);
-}
 
 test(test_timer)
 {
 	using namespace arduino::utils;
+	static bool tFuncStatus = false;
+	Timer timer("TEST");
 	TIME.begin();
 
-	pumpTimer.addTask( TIME.getEpochTime() , tFunc);
+	timer.addTask(TIME.getEpochTime(), [](long) {tFuncStatus = ~tFuncStatus; });
 
 	unsigned long time = millis();
 	LOG_MSG( "Test Timer start on " << TimeValue(TIME.getEpochTime()) << " now() " << now() );
 
 	//while ( millis() < time + 3000 ) {
-		pumpTimer.run();
+	timer.run();
 	//}
 	assertEqual(tFuncStatus, true);
 }

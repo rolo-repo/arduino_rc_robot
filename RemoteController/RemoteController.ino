@@ -3,7 +3,6 @@
 	Created:	03/18/19 17:14:28
 	Author:     NTNET\ROMANL
 */
-#ifndef UNIT_TEST
 //#define ENABLE_LOGGER
 #include <SPI.h>          // библиотека для работы с шиной SPI
 #include "nRF24L01.h"     // библиотека радиомодуля
@@ -25,6 +24,8 @@
 #include "InteruptEncoder.h"
 
 #include "Led.h"
+
+#if defined ARDUINO_AVR_NANO
 
 #define PIN unsigned int
 
@@ -1074,6 +1075,5 @@ ISR(PCINT0_vect) {
 	if (!(PINB & (1 << PB4))) {/* Arduino pin 11 interrupt*/ }
 	if (!(PINB & (1 << PB5))) {/* Arduino pin 13 interrupt*/ }
 }
-
 
 #endif
