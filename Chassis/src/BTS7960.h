@@ -8,6 +8,8 @@
 
 class BTS7960_1PWM : public Motor
 {
+private :
+	void(*callback_break)();
 public:
 	/*
 		R_EN -|
@@ -17,9 +19,11 @@ public:
 		L_PWM -| digital pin
 		R_PWM -| digital pin
 	*/
-	BTS7960_1PWM( PIN i_forward , PIN i_backward , PIN i_speed  /*PWM pin */) : m_L_PWM(i_forward), m_R_PWM(i_backward), m_ENABLE(i_speed)
+	BTS7960_1PWM( PIN i_forward , PIN i_backward , PIN i_speed  /*PWM pin */ , void(*i_callback_break)()) : m_L_PWM(i_forward), m_R_PWM(i_backward), m_ENABLE(i_speed)
 	{
 		m_direction = Direction::STOPED;
+		m_speed = 0;
+		callback_break = i_callback_break;
 	}
 
 	void begin()
@@ -30,7 +34,7 @@ public:
 		stop();
 	}
 
-	virtual void  forward(SPEED i_speed)
+	virtual void  forward( SPEED i_speed )
 	{
 		LOG_MSG( F("Motor -- move forward speed ") << i_speed );
 
@@ -43,9 +47,10 @@ public:
 		analogWrite( m_ENABLE, constrain(i_speed, 0, 255));
 
 		m_direction = Direction::FORWARD;
+		setSpeed(i_speed);
 	}
 
-	virtual void backward(SPEED i_speed) 
+	virtual void backward( SPEED i_speed )
 	{
 		LOG_MSG(F("Motor -- move backward speed ") << i_speed);
 
@@ -58,6 +63,7 @@ public:
 		analogWrite( m_ENABLE, constrain(i_speed, 0, 255));
 
 		m_direction = Direction::BACKWARD;
+		setSpeed(i_speed);
 	}
 
 	virtual void stop()
@@ -65,6 +71,16 @@ public:
 		digitalWrite(m_L_PWM, LOW);
 		digitalWrite(m_R_PWM, LOW);
 		m_direction = Direction::STOPED;
+		setSpeed(0);
+	}
+
+protected:
+	void setSpeed( SPEED i_speed )
+	{
+		if ( m_speed > i_speed )
+			callback_break();
+
+		m_speed = i_speed;
 	}
 
 private:

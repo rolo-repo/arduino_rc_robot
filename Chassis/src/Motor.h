@@ -13,10 +13,11 @@ public:
 	virtual void stop() = 0;
 	virtual void begin() = 0;
 
-	virtual Direction  getDirection() const { return m_direction; }
-
+	Direction  getDirection() const { return m_direction; }
+	SPEED      getSpeed() const { return m_speed;  }
 protected:
 	Direction m_direction;
+	SPEED	  m_speed;
 };
 
 #endif // Motor_h__

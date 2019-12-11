@@ -99,13 +99,15 @@ constexpr PIN cannonSrvPin  = A3;
 
 int SERVO_ZERO = 45;
 
-BTS7960_1PWM motor(motorFrdPin, motorBwdPin, motorSpdPin);
+Led headLight(headLightPin);
+Led backLight(backLightPin);
+
+BTS7960_1PWM motor(motorFrdPin, motorBwdPin, motorSpdPin, []() { backLight.turn_on(Led::Brightness::_100); } );
 Servo servo;
 
 RF24 radio( radioCE_Pin, radioSCN_Pin );
 
-Led headLight( headLightPin );
-Led backLight( backLightPin );
+
 
 //return distance in cm
 unsigned long getDistance()
@@ -206,7 +208,6 @@ void loop()
     static Payload recieved_data;
     short obstacleIteration = 0;
 
-	static bool lightsOn = false;
     while ( OD_ENABLED && getDistance() < OD_MIN_DISTANCE_CM )
     {
         LOG_MSG( "Obstacle detected " << getDistance() << " cm");
@@ -265,9 +266,18 @@ void loop()
              << F(" Steering: ")  << recieved_data.m_steering 
              << ((recieved_data.m_steering > 0) ? F(" LEFT") : F(" RIGHT"))
 		     << F("Bits") << recieved_data.m_b1 << F(" ") << recieved_data.m_b2 << F(" ") << recieved_data.m_b3 << F(" ") << recieved_data.m_b4 ) ;
-		
-		short prevSpeed = curSpeed;
-		
+
+		if (recieved_data.m_b3)
+		{
+			headLight.turn_on(Led::Brightness::_100);
+			backLight.turn_on(Led::Brightness::_50);
+		}
+		else
+		{
+			headLight.turn_off();
+			backLight.turn_off();
+		}
+
 		if ( recieved_data.m_speed > 0 )
         {
             motor.backward( curSpeed = map( recieved_data.m_speed, 0, 127, 0, 255 ) );
@@ -286,22 +296,6 @@ void loop()
 			servo.write( curSteering = map( recieved_data.m_steering, -127, 0, MAX_RIGHT , SERVO_ZERO ));
         }
 		
-		if (  recieved_data.m_b3 )
-		{
-			headLight.turn_on( Led::Brightness::_100 );
-			backLight.turn_on( Led::Brightness::_50 );
-		}
-		else
-		{
-			headLight.turn_off();
-			backLight.turn_off();
-		}
-		 
-		if ( ( curSpeed - prevSpeed ) < 0 && ( curSpeed * prevSpeed ) > 0 /* same sign */ )
-		{
-			backLight.turn_on( Led::Brightness::_100 );
-		}
-
 		payLoadAck.speed = curSpeed;
 
 		payLoadAck.batteryLevel = servo.read();
