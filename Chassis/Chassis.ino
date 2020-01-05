@@ -244,10 +244,6 @@ void loop()
 
     while ( radio.available(&pipeNo) ) 
     {   
-		payLoadAck.speed = 0;
-
-		payLoadAck.batteryLevel = servo.read();
-		radio.writeAckPayload(pipeNo, &payLoadAck, sizeof(payLoadAck));
 
         radio.read(&recieved_data, sizeof(recieved_data));
        /* bool sts[3];
@@ -296,10 +292,10 @@ void loop()
 			servo.write( curSteering = map( recieved_data.m_steering, -127, 0, MAX_RIGHT , SERVO_ZERO ));
         }
 		
+		// Send ack
 		payLoadAck.speed = curSpeed;
-
 		payLoadAck.batteryLevel = servo.read();
-        radio.writeAckPayload( pipeNo, &payLoadAck, sizeof(payLoadAck) );
+		radio.writeAckPayload(pipeNo, &payLoadAck, sizeof(payLoadAck));
     }
 
     if ( lastRecievedTime < millis() - 3 * arduino::utils::RF_TIMEOUT_MS )

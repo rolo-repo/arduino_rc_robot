@@ -1022,7 +1022,7 @@ void loop()
 	data.m_j4 = J4.read();
 
 	if ( ( (data == transmit_data) && lastTransmitionTime > millis() - arduino::utils::RF_TIMEOUT_MS )  
-		||  (!( data == transmit_data ) && lastTransmitionTime > millis() - 5 ) )
+		||  (!( data == transmit_data ) && lastTransmitionTime > millis() - 5 ) /* filter spikes */)
 	{
 		return;//no need to handle ,  nothing changed no timeout occurred
 	}
@@ -1036,7 +1036,7 @@ void loop()
 
 	radio.write(transmit_data.finalize(), sizeof(transmit_data));
 
-	if (radio.isAckPayloadAvailable())
+	while (radio.available())
 	{
 	//	activityLed.rapid_blynk(200);
 		radio.read(&payLoadAck, sizeof(payLoadAck));
