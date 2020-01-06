@@ -907,7 +907,7 @@ void setup()
 	display.clear();
 	radio.begin();              //активировать модуль
 	delayMicroseconds(200);
-	radio.setAutoAck(0);        //режим подтверждения приёма, 1 вкл 0 выкл
+	radio.setAutoAck(1);        //режим подтверждения приёма, 1 вкл 0 выкл
 	radio.setRetries(3, 3);    //(время между попыткой достучаться, число попыток)
 	radio.enableAckPayload();    //разрешить отсылку данных в ответ на входящий сигнал
 	radio.setPayloadSize(sizeof(Payload)/*32*/);     //размер пакета, в байтах
@@ -1036,7 +1036,7 @@ void loop()
 
 	radio.write(transmit_data.finalize(), sizeof(transmit_data));
 
-	while (radio.available())
+	while (radio.isAckPayloadAvailable())
 	{
 	//	activityLed.rapid_blynk(200);
 		radio.read(&payLoadAck, sizeof(payLoadAck));

@@ -35,8 +35,7 @@ unsigned char address[][6] = { "1Node" }; // pipe address
 
 //AF_DCMotor motor(3);
 
-#define MAX_LEFT 15
-#define MAX_RIGHT 75
+
 #define OD_MIN_DISTANCE_CM 5
 
 /*
@@ -97,7 +96,9 @@ constexpr PIN cannonSrvPin  = A3;
 
 #endif ARDUINO_AVR_UNO || defined ARDUINO_AVR_NANO
 
-int SERVO_ZERO = 45;
+int SERVO_ZERO = 90;
+#define SERVO_MAX_LEFT SERVO_ZERO - 45
+#define SERVO_MAX_RIGHT SERVO_ZERO + 60
 
 Led headLight(headLightPin);
 Led backLight(backLightPin);
@@ -106,8 +107,6 @@ BTS7960_1PWM motor(motorFrdPin, motorBwdPin, motorSpdPin, []() { backLight.turn_
 Servo servo;
 
 RF24 radio( radioCE_Pin, radioSCN_Pin );
-
-
 
 //return distance in cm
 unsigned long getDistance()
@@ -137,6 +136,8 @@ void setup()
 
 	motor.begin();
     servo.attach( steeringSrvPin );
+	servo.write( SERVO_ZERO );
+
 	headLight.turn_off();
 	backLight.turn_off();
 
@@ -161,7 +162,6 @@ void setup()
    // SERVO_ZERO = EEPROM.read(0);
 	LOG_MSG("Init success");
 }
-
 
 long map(const long x, const long in_min, const long in_max, const long out_min, const long out_max)
 {
@@ -218,11 +218,11 @@ void loop()
 			headLight.rapid_blynk(1000);
             if ( servo.read() > SERVO_ZERO )
             {
-                servo.write( MAX_LEFT );
+                servo.write( SERVO_MAX_LEFT );
             }
             else
             {
-				servo.write( MAX_RIGHT );
+				servo.write( SERVO_MAX_RIGHT );
             }
             motor.forward( 100 );
 			headLight.rapid_blynk(500);
@@ -244,7 +244,7 @@ void loop()
 
     while ( radio.available(&pipeNo) ) 
     {   
-
+		
         radio.read(&recieved_data, sizeof(recieved_data));
        /* bool sts[3];
 
@@ -285,17 +285,19 @@ void loop()
         
         if ( recieved_data.m_steering > 0 )
         {
-			servo.write( curSteering = map( recieved_data.m_steering, 0 , 127 ,SERVO_ZERO, MAX_LEFT ));
+			servo.write( curSteering = map( recieved_data.m_steering, 0 , 127 ,SERVO_ZERO, SERVO_MAX_LEFT ));
         }
         else
         {
-			servo.write( curSteering = map( recieved_data.m_steering, -127, 0, MAX_RIGHT , SERVO_ZERO ));
+			servo.write( curSteering = map( recieved_data.m_steering, -127, 0, SERVO_MAX_RIGHT , SERVO_ZERO ));
         }
 		
 		// Send ack
 		payLoadAck.speed = curSpeed;
 		payLoadAck.batteryLevel = servo.read();
 		radio.writeAckPayload(pipeNo, &payLoadAck, sizeof(payLoadAck));
+
+
     }
 
     if ( lastRecievedTime < millis() - 3 * arduino::utils::RF_TIMEOUT_MS )
