@@ -1,10 +1,4 @@
-﻿/*
-	Name:       RFCar.ino
-	Created:	03/18/19 11:43:20
-	Author:     NTNET\ROMANL
-*/
-
-#include <SPI.h>
+﻿#include <SPI.h>
 #include "nRF24L01.h"
 #include "RF24.h"
 #include "RFcom.h"

@@ -1,5 +1,3 @@
-// Adapted from:
-// https://github.com/mmurdoch/arduinounit/blob/master/examples/basic/basic.ino
 #ifdef ESP8266
 
 #define ENABLE_LOGGER

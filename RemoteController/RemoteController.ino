@@ -1,9 +1,4 @@
-﻿/*
-	Name:       RFController.ino
-	Created:	03/18/19 17:14:28
-	Author:     NTNET\ROMANL
-*/
-//#define ENABLE_LOGGER
+﻿//#define ENABLE_LOGGER
 #include <SPI.h>          // библиотека для работы с шиной SPI
 #include "nRF24L01.h"     // библиотека радиомодуля
 #include "RF24.h"         // ещё библиотека радиомодуля
