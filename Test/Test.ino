@@ -425,6 +425,23 @@ test(save_and_load)
 	assertEqual(lastIndex, index);
 }
 
+#include "BufferAndSize.h"
+
+test(BufferAndSize)
+{
+	uint16 b[30];
+
+	BufferAndSize_t< uint16, uint16>  buffer(b, sizeof(b) / sizeof(uint16));
+
+	buffer.m_pData[15] = 259;
+
+	assertEqual(buffer[15], 259);
+
+	LOG_MSG("A [" << buffer.m_size << "] "  << buffer[15] << " " << buffer[0]);
+	assertEqual( buffer[31], 0 );
+	
+}
+
 void setup() {
 	delay(1000); // wait for stability on some boards to prevent garbage Serial
 	Serial.begin(115200); // ESP8266 default of 74880 not supported on Linux
