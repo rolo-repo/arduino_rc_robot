@@ -1,4 +1,5 @@
-﻿#include <SPI.h>
+﻿#define ENABLE_LOGGER
+#include <SPI.h>
 #include "nRF24L01.h"
 #include "RF24.h"
 #include "RFcom.h"
@@ -12,7 +13,7 @@
 #include "MX1508.h"
 #include "Led.h"
 
-#define ENABLE_LOGGER
+
 #include "SerialOutput.h"
 
 #define PIN unsigned int
@@ -92,8 +93,8 @@ constexpr PIN backLightPin  = A3;
 #endif ARDUINO_AVR_UNO || defined ARDUINO_AVR_NANO
 
 int SERVO_ZERO = 90;
-#define SERVO_MAX_LEFT SERVO_ZERO - 45
-#define SERVO_MAX_RIGHT SERVO_ZERO + 60
+#define SERVO_MAX_LEFT SERVO_ZERO - 40
+#define SERVO_MAX_RIGHT SERVO_ZERO + 40
 
 Led headLight(headLightPin);
 Led backLight(backLightPin);
@@ -124,6 +125,7 @@ void setup()
 {
 	using namespace arduino::utils;
 	LOG_MSG_BEGIN(115200);
+
 
 	pinMode( trigPin , OUTPUT );
 	pinMode( echoPin , INPUT );
@@ -274,11 +276,11 @@ void loop()
 
 		if ( recieved_data.m_speed > 0 )
 		{
-			motor.backward( curSpeed = map( recieved_data.m_speed, 0, 127, 0, 255 ) );
+			motor.backward( curSpeed = map( recieved_data.m_speed, 0, 127, 25, 255 ) );
 		}
 		else
 		{
-			motor.forward( curSpeed = map( recieved_data.m_speed, -127 , 0 , 255 , 0 ) );
+			motor.forward( curSpeed = map( recieved_data.m_speed, -127 , 0 , 255 , 25 ) );
 		}
 		
 		if ( recieved_data.m_steering > 0 )

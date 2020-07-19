@@ -437,6 +437,8 @@ test(BufferAndSize)
 
 	LOG_MSG("A [" << buffer.m_size << "] "  << buffer[15] << " " << buffer[0]);
 	assertEqual( buffer[31], 0 );
+
+	assertEqual(*buffer, b);
 	
 }
 

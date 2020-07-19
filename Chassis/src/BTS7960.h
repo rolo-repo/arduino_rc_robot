@@ -38,7 +38,7 @@ public:
 	{
 		LOG_MSG( F("Motor -- move forward speed ") << i_speed );
 
-		if (i_speed < 10)
+		if (i_speed < m_deadZone)
 			return stop();
 
 		digitalWrite( m_L_PWM, HIGH);
@@ -54,7 +54,7 @@ public:
 	{
 		LOG_MSG(F("Motor -- move backward speed ") << i_speed);
 
-		if (i_speed < 10)
+		if (i_speed < m_deadZone)
 			return stop();
 
 		digitalWrite(m_L_PWM, LOW);
@@ -88,6 +88,8 @@ private:
 	PIN m_R_PWM;  // backward
 	PIN m_ENABLE; //speed
 	PIN m_L_PWM;  // forward
+
+	short m_deadZone = 30;
 };
 
 
@@ -115,7 +117,7 @@ public:
 	{
 		LOG_MSG(F("Motor -- move forward speed ") << i_speed);
 
-		if (i_speed < 10)
+		if (i_speed < m_deadZone)
 			return stop();
 
 		analogWrite(m_L_PWM, constrain(i_speed, 0, 255));
@@ -128,7 +130,7 @@ public:
 	{
 		LOG_MSG(F("Motor -- move backward speed ") << i_speed);
 
-		if (i_speed < 10)
+		if (i_speed < m_deadZone)
 			return stop();
 
 		analogWrite(m_R_PWM, constrain(i_speed, 0, 255));
@@ -147,5 +149,7 @@ public:
 private :
 	PIN m_R_PWM;  // backward
 	PIN m_L_PWM;  // forward
+
+	short m_deadZone = 30;
 };
 #endif // BTS7960_h__
