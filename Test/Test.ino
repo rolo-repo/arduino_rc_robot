@@ -1,5 +1,3 @@
-// Adapted from:
-// https://github.com/mmurdoch/arduinounit/blob/master/examples/basic/basic.ino
 #ifdef ESP8266
 
 #define ENABLE_LOGGER
@@ -423,6 +421,25 @@ test(save_and_load)
 	assertEqual((short)m_reversed, memory[index++] & 0x1);
 
 	assertEqual(lastIndex, index);
+}
+
+#include "BufferAndSize.h"
+
+test(BufferAndSize)
+{
+	uint16 b[30];
+
+	BufferAndSize_t< uint16, uint16>  buffer(b, sizeof(b) / sizeof(uint16));
+
+	buffer.m_pData[15] = 259;
+
+	assertEqual(buffer[15], 259);
+
+	LOG_MSG("A [" << buffer.m_size << "] "  << buffer[15] << " " << buffer[0]);
+	assertEqual( buffer[31], 0 );
+
+	assertEqual(*buffer, b);
+	
 }
 
 void setup() {
