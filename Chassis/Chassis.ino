@@ -8,9 +8,8 @@
 
 #include <Servo.h>
 
-#include "Motor.h"
 #include "BTS7960.h"
-#include "MX1508.h"
+#include "L298N.h"
 #include "Led.h"
 
 
@@ -65,8 +64,8 @@ constexpr PIN motorFrdPin = 2; //INT0
 constexpr PIN motorSpdPin = 3; //PWM //INT1
 constexpr PIN motorBwdPin = 4;
 
-constexpr PIN turretLeftPin		= 5; //PWM
-constexpr PIN turretRightPin	= 6; //PWM
+constexpr PIN turretSpdPin  = 5; //PWM
+constexpr PIN headLightPin	= 6; //PWM
 
 constexpr PIN radioCE_Pin		= 7;
 constexpr PIN radioSCN_Pin		= 8;
@@ -78,31 +77,58 @@ constexpr PIN steeringSrvPin	= 9; //no PWM due to servo
 //MISO 12 used for radio
 //SCK  13 used for radio
 
-constexpr PIN headLightPin  = A0;
-constexpr PIN trigPin		= A1;
-constexpr PIN echoPin		= A2;
-constexpr PIN backLightPin  = A3;
+constexpr PIN trigPin		 = A0;
+constexpr PIN turretLeftPin	 = A1;
+constexpr PIN turretRightPin = A2;
+constexpr PIN backLightPin   = A3;
 //A4 SDA
 //A5 SCL
 
 #ifdef ARDUINO_AVR_NANO
-//A6
-//A7
+constexpr PIN  lightSensor = A7; //Analog input only
+constexpr PIN  echoPin  = A6; //Analog input only
+
 #endif // ARDUINO_AVR_NANO
 
 #endif ARDUINO_AVR_UNO || defined ARDUINO_AVR_NANO
 
 int SERVO_ZERO = 90;
-#define SERVO_MAX_LEFT SERVO_ZERO - 40
-#define SERVO_MAX_RIGHT SERVO_ZERO + 40
+#define SERVO_MAX_LEFT SERVO_ZERO - 22 //22 is optimal 
+#define SERVO_MAX_RIGHT SERVO_ZERO + 22
 
 Led headLight(headLightPin);
 Led backLight(backLightPin);
 
-BTS7960_1PWM motor(motorFrdPin, motorBwdPin, motorSpdPin, []() { backLight.turn_on(Led::Brightness::_100); } );
-Servo servo;
+L298N_1PWM motor( motorFrdPin, motorBwdPin, motorSpdPin, []() { backLight.turn_on(Led::Brightness::_100); } );
+L298N_1PWM turret( turretLeftPin, turretRightPin, turretSpdPin );
+//BTS7960_1PWM  motor(motorFrdPin, motorBwdPin, motorSpdPin, []() { backLight.turn_on(Led::Brightness::_100); });
 
-MX1508 turret(turretLeftPin, turretRightPin);
+class ServoSmooth : public Servo
+{
+public :
+	void write( int i_value ) { m_targetAngel = constrain( i_value , SERVO_MAX_LEFT , SERVO_MAX_RIGHT ); }
+
+	void run()
+	{
+		static long tm = millis();
+
+		if ( abs( read() - m_targetAngel ) < 2 )
+			return;
+
+		if ( tm + 15 < millis() )
+		{
+			 ( read() > m_targetAngel) ?
+				Servo::write( read() - 1 ):
+				Servo::write( read() + 1 );
+			tm = millis();
+		}
+	}
+
+private:
+	short m_targetAngel;
+};
+
+ServoSmooth servo;
 
 RF24 radio( radioCE_Pin, radioSCN_Pin );
 
@@ -121,6 +147,20 @@ unsigned long getDistance()
 	return distance;
 }
 
+bool isDark ()
+{
+	int analogValue = analogRead(lightSensor);
+
+	LOG_MSG("Analog reading = " << analogValue);
+
+	if ( analogValue < 500) {
+		LOG_MSG("Dark");
+		return true;
+	}
+
+	return false;
+}
+
 void setup() 
 {
 	using namespace arduino::utils;
@@ -133,8 +173,12 @@ void setup()
 	pinMode( headLightPin, OUTPUT );
 	pinMode( backLightPin, OUTPUT );
 
-	motor.begin();
-	servo.attach( steeringSrvPin );
+	pinMode( lightSensor, INPUT );
+
+	motor.begin();	
+	//LOG_MSG("Servo : " << servo.read());
+
+	servo.attach(steeringSrvPin);
 	servo.write( SERVO_ZERO );
 	turret.begin();
 
@@ -195,6 +239,8 @@ long map(const long x, const long in_min, const long in_max, const long out_min,
 //E -
 //C -> E
 
+
+
 void loop() 
 {
 	
@@ -244,26 +290,30 @@ void loop()
 
 	while ( radio.available(&pipeNo) ) 
 	{   
-		
 		radio.read(&recieved_data, sizeof(recieved_data));
-	   /* bool sts[3];
 
-		radio.whatHappened( sts[0], sts[1], sts[2] );
-
-		LOG_MSG( " " << sts[0] << sts[1] << sts[2]);*/
-
-		if ( ! recieved_data.isValid() )
+		if (!recieved_data.isValid())
+		{
+			LOG_MSG(F("Garbage on RF"));
+			radio.reUseTX();	//triggers resend of data
 			continue;
+		}
 
 		lastRecievedTime = millis();
 
+		if (!servo.attached())
+			servo.attach(steeringSrvPin);
+
 		LOG_MSG(F("RCV  Speed:") << recieved_data.m_speed 
-			 << F(" Direction: ") << ((recieved_data.m_speed > 0) ? F("FORWARD") : F("BACKWARD"))
+			 << F(" Direction: ") << ((recieved_data.m_speed > 0) ? F("BACKWARD") : F("FORWARD"))
 			 << F(" Steering: ")  << recieved_data.m_steering 
 			 << ((recieved_data.m_steering > 0) ? F(" LEFT") : F(" RIGHT"))
-			 << F("Bits") << recieved_data.m_b1 << F(" ") << recieved_data.m_b2 << F(" ") << recieved_data.m_b3 << F(" ") << recieved_data.m_b4 ) ;
+			 << F(" Bits ")	<< recieved_data.m_b1 
+			 << F(" ")		<< recieved_data.m_b2 
+			 << F(" ")		<< recieved_data.m_b3 
+			 << F(" ")		<< recieved_data.m_b4 ) ;
 
-		if (recieved_data.m_b3)
+		if (recieved_data.m_b3 || isDark() )
 		{
 			headLight.turn_on(Led::Brightness::_100);
 			backLight.turn_on(Led::Brightness::_50);
@@ -276,29 +326,29 @@ void loop()
 
 		if ( recieved_data.m_speed > 0 )
 		{
-			motor.backward( curSpeed = map( recieved_data.m_speed, 0, 127, 25, 255 ) );
+			motor.backward( curSpeed = map( recieved_data.m_speed, 0, 127, 0, 255 ) );
 		}
 		else
 		{
-			motor.forward( curSpeed = map( recieved_data.m_speed, -127 , 0 , 255 , 25 ) );
+			motor.forward( curSpeed = map( recieved_data.m_speed, -127 , 0 , 255 , 0 ) );
 		}
 		
 		if ( recieved_data.m_steering > 0 )
 		{
-			servo.write( curSteering = map( recieved_data.m_steering, 0 , 127 ,SERVO_ZERO, SERVO_MAX_LEFT ));
+			servo.write(curSteering = map( recieved_data.m_steering, 0, 127, SERVO_ZERO, SERVO_MAX_LEFT ));
 		}
 		else
 		{
-			servo.write( curSteering = map( recieved_data.m_steering, -127, 0, SERVO_MAX_RIGHT , SERVO_ZERO ));
+			servo.write(curSteering = map( recieved_data.m_steering, -127, 0, SERVO_MAX_RIGHT, SERVO_ZERO ));
 		}
 
 		if ( recieved_data.m_j4 > 0 )
 		{
-			turret.left( map(recieved_data.m_j4, 0, 127, 0, 100) );                   
+			turret.right( map ( recieved_data.m_j4, 0, 127, 0, 255 ) );                   
 		}
 		else
 		{
-			turret.right( map(recieved_data.m_j4 , -127, 0, 100, 0) );
+			turret.left(  map( recieved_data.m_j4 , -127, 0, 255, 0 ) );
 		}
 		
 		// Send ack
@@ -317,9 +367,18 @@ void loop()
 		servo.write(SERVO_ZERO);
 		curSteering = servo.read();
 		curSpeed = 0;
+
+		if (curSteering == SERVO_ZERO)
+			servo.detach();
+
 		backLight.fade(500);
 		headLight.fade(500);
 
 		lastRecievedTime = millis();
 	}
+
+	
+	turret.run();
+	motor.run();
+	servo.run();
 }
