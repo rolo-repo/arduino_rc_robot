@@ -153,7 +153,7 @@ bool isDark ()
 
 	LOG_MSG("Analog reading = " << analogValue);
 
-	if ( analogValue < 500) {
+	if ( analogValue > 900) {
 		LOG_MSG("Dark");
 		return true;
 	}
